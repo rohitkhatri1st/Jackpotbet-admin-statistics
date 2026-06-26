@@ -43,7 +43,7 @@ func (s *Server) InitLoggers() {
 	if s.Config.LoggerConfig.EnableConsoleLogger {
 		cw = logger.NewZeroLogConsoleWriter(logger.NewStandardConsoleWriter())
 	}
-	s.Log = logger.NewLogger(cw, fw)
+	s.Log = logger.NewZeroLogger(cw, fw)
 	s.ForceLog = logger.NewForceLogger(fw)
 }
 

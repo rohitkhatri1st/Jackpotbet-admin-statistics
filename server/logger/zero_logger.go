@@ -7,9 +7,9 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// NewLogger returns a Logger writing to cw (console) and/or fw (file).
+// NewZeroLogger returns a Logger writing to cw (console) and/or fw (file).
 // Pass nil for any destination you don't need.
-func NewLogger(cw, fw io.Writer) Logger {
+func NewZeroLogger(cw, fw io.Writer) Logger {
 	var writers []io.Writer
 
 	if cw != nil {
