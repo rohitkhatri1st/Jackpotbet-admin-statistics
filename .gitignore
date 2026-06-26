@@ -1,0 +1,3 @@
+conf/**
+!conf/sample.toml
+.vscode/*
