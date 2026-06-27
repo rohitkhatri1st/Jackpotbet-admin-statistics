@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engineering Decisions — JackpotBet Admin Statistics API</title>
+  <meta name="description" content="Architecture choices, framework decisions, and design rationale behind the JackpotBet Admin Statistics Go API.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ground:    #0C1117;
+      --surface:   #141B26;
+      --surface2:  #1C2536;
+      --border:    #24304A;
+      --accent:    #00C4E8;
+      --accent-dim:#004A5C;
+      --text:      #DCE5F4;
+      --text-mid:  #8E9DB8;
+      --text-low:  #5A6B88;
+      --green:     #34D399;
+      --amber:     #FBBF24;
+      --red:       #F87171;
+      --code-bg:   #0A1520;
+    }
+
+    html { background: var(--ground); color: var(--text); font-size: 16px; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      line-height: 1.7;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px 120px;
+    }
+
+    /* ── Header ── */
+    .header {
+      padding: 64px 0 48px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 64px;
+    }
+    .header-eyebrow {
+      font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      line-height: 1.25;
+      color: var(--text);
+      text-wrap: balance;
+      margin-bottom: 16px;
+    }
+    .header-sub {
+      font-size: 1rem;
+      color: var(--text-mid);
+      max-width: 560px;
+      line-height: 1.6;
+    }
+    .header-meta {
+      display: flex;
+      gap: 24px;
+      margin-top: 28px;
+      flex-wrap: wrap;
+    }
+    .meta-item {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.75rem;
+      color: var(--text-low);
+    }
+    .meta-item span { color: var(--text-mid); }
+
+    /* ── Section ── */
+    .section { margin-bottom: 72px; }
+    .section-eyebrow {
+      font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-low);
+      margin-bottom: 10px;
+    }
+    h2 {
+      font-size: 1.35rem;
+      font-weight: 650;
+      color: var(--text);
+      margin-bottom: 20px;
+      text-wrap: balance;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin: 28px 0 10px;
+    }
+    p { color: var(--text-mid); margin-bottom: 14px; }
+    p:last-child { margin-bottom: 0; }
+
+    /* ── Decision record ── */
+    .decision {
+      border-left: 2px solid var(--accent);
+      background: var(--surface);
+      border-radius: 0 6px 6px 0;
+      padding: 20px 24px;
+      margin: 24px 0;
+    }
+    .decision + .decision { margin-top: 16px; }
+    .decision-label {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    .decision-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+    .decision-body {
+      font-size: 0.875rem;
+      color: var(--text-mid);
+      line-height: 1.65;
+    }
+    .decision-body p { font-size: 0.875rem; margin-bottom: 8px; }
+
+    .tradeoff {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 0.8rem;
+      align-items: flex-start;
+    }
+    .tradeoff-label {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 3px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .tradeoff-label.chose { background: var(--accent-dim); color: var(--accent); }
+    .tradeoff-label.trade { background: #2A2010; color: var(--amber); }
+    .tradeoff-text { color: var(--text-mid); line-height: 1.5; }
+
+    /* ── Arch diagram ── */
+    .arch {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 24px;
+      margin: 20px 0;
+      overflow-x: auto;
+    }
+    .arch-row { display: flex; align-items: center; gap: 0; margin-bottom: 4px; }
+    .arch-box {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.8rem;
+      padding: 8px 20px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+    .arch-box.handler { background: #0E2840; color: #60BFFF; border: 1px solid #1A4A70; }
+    .arch-box.service { background: #0D2A1C; color: #4ADE80; border: 1px solid #1A4A30; }
+    .arch-box.repo    { background: #2A1C0D; color: #FBBF24; border: 1px solid #4A3010; }
+    .arch-arrow {
+      font-family: ui-monospace, monospace;
+      color: var(--text-low);
+      padding: 0 12px;
+      font-size: 0.85rem;
+    }
+
+    /* ── Code ── */
+    code {
+      font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      font-size: 0.82em;
+      background: var(--code-bg);
+      color: #93C5FD;
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px 24px;
+      overflow-x: auto;
+      margin: 16px 0;
+      font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      font-size: 0.8rem;
+      line-height: 1.6;
+      color: #93C5FD;
+    }
+    pre .comment { color: var(--text-low); }
+    pre .kw  { color: #C084FC; }
+
+    /* ── Pipeline diagram ── */
+    .pipeline {
+      display: flex;
+      align-items: center;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px 24px;
+      overflow-x: auto;
+      margin: 16px 0;
+      flex-wrap: nowrap;
+      white-space: nowrap;
+      gap: 0;
+    }
+    .pipeline-stage { text-align: center; flex-shrink: 0; }
+    .stage-box {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.72rem;
+      padding: 8px 14px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+    .stage-box.s1 { background: #1A1A40; color: #A78BFA; border: 1px solid #2A2A60; }
+    .stage-box.s2 { background: #0E2840; color: #60BFFF; border: 1px solid #1A4A70; }
+    .stage-box.s3 { background: #0D2A1C; color: #4ADE80; border: 1px solid #1A4A30; }
+    .stage-label {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.62rem;
+      color: var(--text-low);
+      margin-top: 5px;
+      letter-spacing: 0.06em;
+    }
+    .pipe-arrow { color: var(--text-low); padding: 0 8px; font-size: 1rem; flex-shrink: 0; }
+
+    /* ── Endpoint table ── */
+    .endpoint-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.85rem; }
+    .endpoint-table th {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.62rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-low);
+      text-align: left;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .endpoint-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-mid);
+      vertical-align: top;
+    }
+    .endpoint-table tr:last-child td { border-bottom: none; }
+    .method {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 3px;
+      letter-spacing: 0.04em;
+    }
+    .method.get  { background: #0D2A1C; color: #4ADE80; }
+    .method.post { background: #1A1A0A; color: #FBBF24; }
+    .path { font-family: ui-monospace, Consolas, monospace; font-size: 0.78rem; color: #93C5FD; }
+
+    /* ── Feature list ── */
+    ul.feature-list { list-style: none; margin: 14px 0; padding: 0; }
+    ul.feature-list li {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      font-size: 0.875rem;
+      color: var(--text-mid);
+      padding: 5px 0;
+    }
+    ul.feature-list li::before {
+      content: '—';
+      color: var(--accent);
+      flex-shrink: 0;
+      font-family: ui-monospace, monospace;
+      margin-top: 1px;
+    }
+
+    /* ── Facet diagram ── */
+    .facet-diagram {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px 24px;
+      overflow-x: auto;
+      margin: 16px 0;
+      font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      font-size: 0.78rem;
+      line-height: 1.8;
+      color: var(--text-mid);
+    }
+    .facet-diagram .stage  { color: #60BFFF; }
+    .facet-diagram .branch { color: #A78BFA; }
+    .facet-diagram .result { color: #4ADE80; }
+    .facet-diagram .dim    { color: var(--text-low); }
+
+    /* ── Cache key diagram ── */
+    .cache-key {
+      display: flex;
+      gap: 0;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 14px 0;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.8rem;
+    }
+    .ck-seg {
+      padding: 6px 12px;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+    .ck-seg:first-child { border-left: 1px solid var(--border); border-radius: 4px 0 0 4px; }
+    .ck-seg:last-child  { border-radius: 0 4px 4px 0; }
+    .ck-seg.prefix { background: var(--accent-dim); color: var(--accent); }
+    .ck-seg.user   { background: #1A1A40; color: #A78BFA; }
+    .ck-seg.date   { background: #0D2A1C; color: #4ADE80; }
+    .ck-sep { color: var(--text-low); padding: 6px 0; }
+
+    /* ── Authorship note ── */
+    .authorship-note {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--text-low);
+      border-radius: 0 6px 6px 0;
+      padding: 20px 28px;
+      margin-bottom: 64px;
+    }
+    .authorship-label {
+      font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      font-size: 0.62rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-low);
+      margin-bottom: 12px;
+    }
+    .authorship-body {
+      font-size: 0.875rem;
+      color: var(--text-mid);
+      line-height: 1.7;
+      margin-bottom: 10px;
+    }
+    .authorship-body:last-child { margin-bottom: 0; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-eyebrow">JackpotBet Admin Statistics API</div>
+  <h1>Engineering Decisions</h1>
+  <p class="header-sub">
+    A record of the architectural choices, library selections, and design rationale behind this Go REST API — covering what was built, why each decision was made, and what trade-offs were accepted.
+  </p>
+  <div class="header-meta">
+    <div class="meta-item">Language <span>Go 1.23</span></div>
+    <div class="meta-item">Database <span>MongoDB + Redis</span></div>
+    <div class="meta-item">Pattern <span>Handler → Service → Repository</span></div>
+    <div class="meta-item">Scope <span>Read-heavy internal admin API</span></div>
+  </div>
+</div>
+
+<!-- ── AUTHORSHIP NOTE ── -->
+<div class="authorship-note">
+  <div class="authorship-label">A note on authorship</div>
+  <p class="authorship-body">
+    Every architectural decision, design pattern, and engineering trade-off in this codebase was conceived and reasoned through by me — the three-layer structure, the cursor pagination approach, the <code>$setWindowFields</code> + <code>$facet</code> rank pipeline, the materialized-view analysis, the UTC enforcement points, all of it. Where I knew what I wanted, I designed it first and directed the implementation.
+  </p>
+  <p class="authorship-body">
+    That said, some parts of the code were written or polished with AI assistance: inline code comments, boilerplate sections of repetitive handler code that follow an already-established pattern, and the prose in this document. AI in those cases was a faster keyboard, not an architect — it built within the boundaries I had already drawn, and did not decide what those boundaries should be.
+  </p>
+  <p class="authorship-body">
+    I want to be transparent about this rather than claim every line was typed by hand. The approaches are mine; the execution, in places, had help.
+  </p>
+</div>
+
+<!-- ── 01 ARCHITECTURE ── -->
+<div class="section">
+  <div class="section-eyebrow">01 · Architecture</div>
+  <h2>Three-Layer Design</h2>
+  <p>The project uses a strict Handler → Service → Repository layering with no domain events, adapters, or CQRS. This was a deliberate choice calibrated to the problem's actual complexity.</p>
+
+  <div class="arch">
+    <div class="arch-row">
+      <div class="arch-box handler">Handler (api/)</div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box service">Service (service/)</div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box repo">Repository (repository/)</div>
+    </div>
+    <div style="margin-top:14px; font-family: ui-monospace, monospace; font-size:0.72rem; color:var(--text-low); line-height:1.8">
+      HTTP parsing · routing · validation · JSON encoding<br>
+      Business logic · grouping · arithmetic · caching<br>
+      MongoDB queries · aggregation pipelines · indexes
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">Decision</div>
+    <div class="decision-title">Why not a simpler single-layer CRUD structure?</div>
+    <div class="decision-body">
+      <p>The stat endpoints require MongoDB aggregation pipelines — <code>$group</code>, <code>$setWindowFields</code>, <code>$facet</code>. Those pipelines need a dedicated home that isn't a handler. The repository layer provides that. A CRUD-only project could skip it, but this one couldn't.</p>
+      <div class="tradeoff">
+        <div class="tradeoff-label chose">Kept</div>
+        <div class="tradeoff-text">Service layer for grouping logic (<code>groupDailyWagersByDate</code>), decimal arithmetic, and cache coordination — things that have no place in a handler or a raw DB call.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">Decision</div>
+    <div class="decision-title">Why not add domain/event layers?</div>
+    <div class="decision-body">
+      <p>Domain events make sense when actions trigger side-effects across bounded contexts. This API has one context (transaction statistics) and all callers are internal. Adding an event bus or domain layer would be indirection without payoff — more surface area for bugs with no architectural benefit at this scale.</p>
+      <div class="tradeoff">
+        <div class="tradeoff-label trade">Trade-off</div>
+        <div class="tradeoff-text">Introducing real-time notifications or cross-service communication later would require adding an event layer. The current design would need refactoring at that point — that cost was accepted intentionally.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 02 LIBRARIES ── -->
+<div class="section">
+  <div class="section-eyebrow">02 · Library Choices</div>
+  <h2>Frameworks and Dependencies</h2>
+
+  <div class="decision">
+    <div class="decision-label">HTTP Router</div>
+    <div class="decision-title">gorilla/mux over Gin, Echo, or Fiber</div>
+    <div class="decision-body">
+      <p>Gin and Echo are full frameworks that wrap <code>net/http</code> in their own context types. Any middleware or handler written for them is not portable to standard <code>net/http</code>. Since validation is handled by <code>go-playground/validator</code> directly — not by the framework — Gin provides no validation benefit and locks the codebase into its context.</p>
+      <p>gorilla/mux is a router only. Handlers receive standard <code>http.ResponseWriter</code> and <code>*http.Request</code>. Path variables come from <code>mux.Vars(r)</code>, subrouters handle auth middleware grouping cleanly, and nothing about the code is framework-specific.</p>
+      <div class="tradeoff">
+        <div class="tradeoff-label trade">Trade-off</div>
+        <div class="tradeoff-text">No built-in rate limiting, no automatic swagger generation. Those were out of scope; they could be added as middleware or a separate tool without changing any handler code.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">Config</div>
+    <div class="decision-title">viper over burntsushi/toml</div>
+    <div class="decision-body">
+      <p>Viper has native multi-path search: it finds <code>conf/default.toml</code> whether the binary is run from the repo root or from <code>cmd/seed/</code>, without any manual path construction. It also supports naming different environments by file name (<code>test.toml</code>, <code>production.toml</code>) with a single <code>LoadFrom("name")</code> call.</p>
+      <div class="tradeoff">
+        <div class="tradeoff-label trade">Trade-off</div>
+        <div class="tradeoff-text">Viper silently ignores unknown keys; burntsushi/toml errors on them. Unknown keys in config are real mistakes and stricter validation would catch them earlier. This was accepted because the config structure is small and explicit.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">Decimal Arithmetic</div>
+    <div class="decision-title">shopspring/decimal throughout the service layer</div>
+    <div class="decision-body">
+      <p>Monetary amounts and crypto values cannot use <code>float64</code> — floating point rounding errors compound across summation. <code>bson.Decimal128</code> stores values precisely in MongoDB but has no arithmetic operations. The boundary is explicit: Decimal128 is parsed to a decimal string at the repository edge, the service uses <code>shopspring/decimal</code> for all arithmetic, and results are formatted with <code>.StringFixed(n)</code> before returning.</p>
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">Logging</div>
+    <div class="decision-title">zerolog behind a Logger interface</div>
+    <div class="decision-body">
+      <p>All service and handler code receives a <code>logger.Logger</code> interface, not a concrete zerolog logger. This means the logger can be swapped for testing, replaced with a different backend, or silenced entirely — without changing any call site. zerolog is fast and structured by default, which is what a JSON-log-parsing infrastructure (ECS, Datadog, etc.) needs.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── 03 HTTP LAYER ── -->
+<div class="section">
+  <div class="section-eyebrow">03 · HTTP Layer</div>
+  <h2>Handler Design and Error Handling</h2>
+  <p>Every handler follows the same sequence. Deviating from it would mean inconsistent validation or error shape across endpoints.</p>
+
+  <ul class="feature-list">
+    <li>Decode input — <code>DecodeQuery</code> for GET (via <code>qs</code> tags), <code>DecodeJSONBody</code> for POST</li>
+    <li>Apply defaults — e.g. <code>if query.Limit == 0 { query.Limit = 20 }</code></li>
+    <li>Validate with <code>go-playground/validator</code> — wraps the error string into an <code>AppError</code></li>
+    <li>Call <code>query.DateRangeFilter.Validate()</code> — normalises From/To to UTC, checks From &lt; To</li>
+    <li>Convert raw values — e.g. hex cursor string to <code>bson.ObjectID</code></li>
+    <li>Call the service, respond with <code>a.respond</code> or <code>a.respondError</code></li>
+  </ul>
+
+  <h3>Structured errors</h3>
+  <p>All error responses share one shape: <code>{ "code": "VALIDATION_ERROR", "message": "..." }</code>. The <code>AppError</code> type carries the HTTP status, the code, and the message. Service-layer errors that are not <code>AppError</code> become <code>500 INTERNAL_ERROR</code> automatically — handlers never manually produce 500s.</p>
+
+  <h3>Auth middleware</h3>
+  <p>A static token check on the <code>/internal</code> subrouter. The middleware reads <code>Authorization: &lt;token&gt;</code>, compares with the configured value, and rejects with <code>401</code> before the handler runs. The middleware is isolated — replacing it with JWT or mTLS later means changing one file.</p>
+</div>
+
+<!-- ── 04 STARTUP SAFETY ── -->
+<div class="section">
+  <div class="section-eyebrow">04 · Startup Safety</div>
+  <h2>Nil-Field Validation on Boot</h2>
+  <p>A common mistake in dependency injection: add a new field to <code>Repos</code> or <code>Services</code>, forget to wire it in <code>init.go</code>, and ship a binary that panics at runtime when that field is first accessed — possibly in production, under load.</p>
+
+  <div class="decision">
+    <div class="decision-label">Mechanism</div>
+    <div class="decision-title">Reflect-based nil check on every Repos and Services field at startup</div>
+    <div class="decision-body">
+      <p><code>server.validate()</code> walks every field of <code>Repos</code> and <code>Services</code> using reflection and fatals immediately if any pointer or interface field is nil. It also checks for typed nils — the case where an interface field is non-nil but wraps a nil concrete pointer, which would also panic at the first method call.</p>
+      <p>The result is that a missing wire in <code>init.go</code> fails fast and loudly at startup rather than silently at runtime.</p>
+    </div>
+  </div>
+
+  <p>The compile-time complement is the interface satisfaction check at the bottom of each mongo implementation file:</p>
+  <pre><span class="comment">// Fails at compile time if TransactionRepository is missing any interface method.</span>
+<span class="kw">var</span> _ repository.TransactionRepository = (*TransactionRepository)(<span class="kw">nil</span>)</pre>
+</div>
+
+<!-- ── 05 SEEDER ── -->
+<div class="section">
+  <div class="section-eyebrow">05 · Data Seeder</div>
+  <h2>Three-Stage Concurrent Pipeline</h2>
+  <p>The seeder generates 4 million transaction documents (2 million rounds × 2 transactions each). A naive sequential loop would be far too slow. The seeder is structured as a three-stage pipeline where stages run concurrently and communicate through channels.</p>
+
+  <div class="pipeline">
+    <div class="pipeline-stage">
+      <div class="stage-box s1">Scheduler</div>
+      <div class="stage-label">Stage 1 · 1 goroutine</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipeline-stage">
+      <div class="stage-box s2">Builder</div>
+      <div class="stage-label">Stage 2 · N goroutines</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipeline-stage">
+      <div class="stage-box s3">Writer</div>
+      <div class="stage-label">Stage 3 · N goroutines</div>
+    </div>
+  </div>
+
+  <ul class="feature-list">
+    <li><strong>Scheduler</strong> — slices 2M rounds into 500-round batches and sends job descriptors over a channel. No data is generated here.</li>
+    <li><strong>Builder</strong> — CPU-heavy. Multiple workers run in parallel, each with its own <code>rand.Rand</code> (the global rand is not goroutine-safe without a lock). Generates random amounts, currencies, and timestamps for each batch, producing 1000 documents ready to insert.</li>
+    <li><strong>Writer</strong> — I/O-heavy. Multiple workers fire concurrent <code>InsertMany</code> calls to MongoDB. Workers are capped at <code>min(runtime.NumCPU(), 20)</code> — beyond 20, connection overhead and channel contention outweigh concurrency gains.</li>
+  </ul>
+
+  <p>All timestamps are generated as UTC (<code>time.Now().UTC()</code>) spread randomly over a one-year window, so the seeded data has realistic temporal distribution for testing the date-range stat endpoints.</p>
+</div>
+
+<!-- ── 06 API DESIGN ── -->
+<div class="section">
+  <div class="section-eyebrow">06 · API Design</div>
+  <h2>Endpoints and Key Decisions</h2>
+
+  <div style="overflow-x:auto">
+    <table class="endpoint-table">
+      <thead>
+        <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="method get">GET</span></td>
+          <td class="path">/internal/transactions</td>
+          <td>Paginated list with optional date filter</td>
+        </tr>
+        <tr>
+          <td><span class="method post">POST</span></td>
+          <td class="path">/internal/transactions</td>
+          <td>Create a single Wager or Payout transaction</td>
+        </tr>
+        <tr>
+          <td><span class="method get">GET</span></td>
+          <td class="path">/internal/gross_gaming_rev</td>
+          <td>GGR per currency + USD over a date range</td>
+        </tr>
+        <tr>
+          <td><span class="method get">GET</span></td>
+          <td class="path">/internal/daily_wager_volume</td>
+          <td>Daily wager volume grouped by date with per-currency breakdown</td>
+        </tr>
+        <tr>
+          <td><span class="method get">GET</span></td>
+          <td class="path">/internal/user/{userId}/wager_percentile</td>
+          <td>User's wager rank and top-N% position in the period</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Cursor-based pagination for GET /transactions</h3>
+  <div class="decision">
+    <div class="decision-label">Decision</div>
+    <div class="decision-title">ObjectID cursor pagination over offset/limit</div>
+    <div class="decision-body">
+      <p>Offset pagination (<code>SKIP n</code>) requires MongoDB to scan and discard <code>n</code> documents on every page request. At 4 million documents this is expensive and gets slower as the offset increases. Cursor pagination passes the last seen ObjectID and uses <code>{ _id: { $gt: cursor } }</code> — the index seek is O(log n) regardless of how deep into the result set the client is.</p>
+      <div class="tradeoff">
+        <div class="tradeoff-label trade">Trade-off</div>
+        <div class="tradeoff-text">Cannot jump to an arbitrary page number. For an admin API doing sequential exports this is not a limitation — pages are consumed in order.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Grouped response for GET /daily_wager_volume</h3>
+  <div class="decision">
+    <div class="decision-label">Decision</div>
+    <div class="decision-title">Map-keyed currencies, not a fixed struct with named fields</div>
+    <div class="decision-body">
+      <p>An initial design used a struct with named currency fields: <code>{ ETH: ..., BTC: ..., USDT: ... }</code>. This was rejected because it hardcodes the currency set into both the API response and the frontend parsing code. New currencies would require a code change on both sides. The response uses <code>map[string]CurrencyVolume</code> instead — adding a new currency requires only a new entry in the rate table.</p>
+      <p>Grouping (flat <code>(date, currency)</code> rows from MongoDB → one entry per date) happens in a pure helper function <code>groupDailyWagersByDate</code> using a <code>[]string</code> slice to preserve date order alongside a map for O(1) lookup.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── 07 WAGER PERCENTILE ── -->
+<div class="section">
+  <div class="section-eyebrow">07 · Wager Percentile</div>
+  <h2>Rank Computation Without Fetching All Users</h2>
+  <p>The naive approach to <code>GET /user/{userId}/wager_percentile</code> is to fetch all users' wager totals, sort them in application code, and find the target user's position. This transfers potentially thousands of documents over the wire for every request.</p>
+
+  <div class="decision">
+    <div class="decision-label">Decision</div>
+    <div class="decision-title">MongoDB computes the rank; only one document returns to the application</div>
+    <div class="decision-body">
+      <p>The aggregation uses <code>$setWindowFields</code> to assign a rank to each user by total USD wagered (descending), then a <code>$facet</code> to run two sub-pipelines in parallel on the grouped result:</p>
+    </div>
+  </div>
+
+  <div class="facet-diagram">
+    <span class="stage">$match</span> <span class="dim">(type=Wager + date range)</span><br>
+    <span class="stage">$group</span> <span class="dim">(by userId, sum usdAmount → one doc per user)</span><br>
+    <span class="stage">$facet</span> <span class="dim">{</span><br>
+    &nbsp;&nbsp;<span class="branch">"userRank"</span><span class="dim">: [</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span class="stage">$setWindowFields</span> <span class="dim">{ sortBy: totalUSD desc, output: { rank: $rank } }</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span class="stage">$match</span> <span class="dim">{ _id: targetUserId } →</span> <span class="result">0 or 1 document</span><br>
+    &nbsp;&nbsp;<span class="dim">],</span><br>
+    &nbsp;&nbsp;<span class="branch">"total"</span><span class="dim">: [</span> <span class="stage">$count</span> <span class="dim">"n" ] →</span> <span class="result">{ n: 700 }</span><br>
+    <span class="dim">}</span>
+  </div>
+
+  <p><code>$facet</code> always returns exactly one document. The <code>userRank</code> array is empty when the user had no wagers in the period — the service places them last: rank = totalUsers + 1, percentile = 100%.</p>
+  <p>The percentile formula matches the assignment example: if a user is 10th out of 500, <code>topPercentile = 10/500 × 100 = 2.00</code> — meaning they are in the top 2%.</p>
+
+  <h3>Index supporting the aggregation</h3>
+  <p>A compound index <code>{ type: 1, createdAt: 1 }</code> covers the <code>$match</code> stage filter on <code>type = "Wager"</code> and the date range, so MongoDB can satisfy the match from the index without a collection scan.</p>
+</div>
+
+<!-- ── 08 CACHING ── -->
+<div class="section">
+  <div class="section-eyebrow">08 · Caching</div>
+  <h2>Redis TTL Caching and Why Not a Materialized View</h2>
+  <p>The GGR, daily wager volume, and wager percentile endpoints all aggregate over millions of transactions. Running the full pipeline on every request is expensive at any meaningful scale. A caching layer was added.</p>
+
+  <div class="decision">
+    <div class="decision-label">Decision</div>
+    <div class="decision-title">Simple Redis TTL caching, not a materialized view</div>
+    <div class="decision-body">
+      <p>A materialized view would pre-compute daily totals into a <code>daily_stats</code> MongoDB collection via a nightly cron, making GGR and daily wager volume O(days) reads instead of O(millions). This is the right long-term architecture.</p>
+      <p>It was intentionally not built here because it introduces coordinated complexity: the cron must handle backdated transactions (manually inserted corrections), cache invalidation must be coordinated between the nightly recompute and any manual correction endpoint, and the recompute window (how many past days to redo) requires operational tuning. That complexity exceeds the scope of this assignment.</p>
+      <div class="tradeoff">
+        <div class="tradeoff-label chose">Instead</div>
+        <div class="tradeoff-text">TTL-based Redis caching. Each unique (from, to) date range maps to a JSON blob with a configurable TTL (default 24h). Stale data is acceptable within the TTL window for an admin reporting API.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Cache key design</h3>
+  <p>Dates are normalised to UTC day strings so queries spanning the same calendar days share one entry regardless of the time-of-day component:</p>
+
+  <div style="margin: 16px 0">
+    <p style="font-size:0.78rem; color:var(--text-low); font-family:ui-monospace,monospace; margin-bottom:8px;">Global stat key (GGR, daily wager):</p>
+    <div class="cache-key">
+      <div class="ck-seg prefix">ggr</div>
+      <div class="ck-sep">:</div>
+      <div class="ck-seg date">2024-01-01</div>
+      <div class="ck-sep">:</div>
+      <div class="ck-seg date">2024-01-31</div>
+    </div>
+    <p style="font-size:0.78rem; color:var(--text-low); font-family:ui-monospace,monospace; margin: 16px 0 8px;">User-scoped key (wager percentile):</p>
+    <div class="cache-key">
+      <div class="ck-seg user">507f1f77…</div>
+      <div class="ck-sep">:</div>
+      <div class="ck-seg prefix">wager_percentile</div>
+      <div class="ck-sep">:</div>
+      <div class="ck-seg date">2024-01-01</div>
+      <div class="ck-sep">:</div>
+      <div class="ck-seg date">2024-01-31</div>
+    </div>
+  </div>
+
+  <h3>Redis memory management</h3>
+  <p>On connect, the application sets <code>maxmemory-policy allkeys-lru</code> so Redis evicts the least-recently-used cache entry when memory is full — rather than erroring on new writes. An optional <code>max_memory</code> config value (e.g. <code>"256mb"</code>) caps total Redis memory; leaving it empty delegates memory management to the operator's Redis configuration.</p>
+</div>
+
+<!-- ── 09 UTC ── -->
+<div class="section">
+  <div class="section-eyebrow">09 · Time Handling</div>
+  <h2>UTC Throughout</h2>
+  <p>All timestamps are stored and returned in UTC. There are three enforcement points:</p>
+
+  <ul class="feature-list">
+    <li><strong>Query params</strong> — <code>DateRangeFilter.Validate()</code> has a pointer receiver and normalises <code>From</code> and <code>To</code> to UTC in-place before any handler calls the service. Clients can send any timezone offset; it is converted at the boundary.</li>
+    <li><strong>Persistence</strong> — <code>time.Now().UTC()</code> is the only form used when generating a <code>createdAt</code> timestamp. Caller-supplied times (<code>input.CreatedAt</code>) are normalised with <code>.UTC()</code> before storage.</li>
+    <li><strong>Seeder</strong> — the historical time window is computed from <code>time.Now().UTC()</code> so all 4 million seeded timestamps are UTC.</li>
+  </ul>
+
+  <p>Elapsed-time measurements used only for logging duration (<code>time.Now()</code> / <code>time.Since()</code> in middleware) are exempt — they produce durations, not stored timestamps.</p>
+</div>
+
+<!-- ── 10 INTERFACE DESIGN ── -->
+<div class="section">
+  <div class="section-eyebrow">10 · Interface Design</div>
+  <h2>Repository Interfaces and Swappability</h2>
+  <p>The <code>repository/</code> package contains only interfaces and plain-Go filter/result types — no MongoDB imports. The concrete implementations live in <code>repository/mongo/</code>. This means:</p>
+
+  <ul class="feature-list">
+    <li>Tests can inject a mock that satisfies the interface without starting MongoDB.</li>
+    <li>Switching to a different database is a new implementation file, not a rewrite of service logic.</li>
+    <li>The service layer never sees a <code>bson.D</code> or a <code>mongo.Cursor</code> — all amounts cross the boundary as decimal strings, all IDs as <code>bson.ObjectID</code> (the one bson type allowed at the interface boundary as a cursor identifier).</li>
+  </ul>
+
+  <p>The same isolation applies to the logger: all packages receive a <code>logger.Logger</code> interface. The zerolog implementation is wired in <code>server/init.go</code> and is invisible to anything that uses it.</p>
+</div>
+
+</body>
+</html>

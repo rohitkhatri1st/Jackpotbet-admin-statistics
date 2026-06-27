@@ -308,9 +308,81 @@ func (s *TransactionService) GetGGR(ctx context.Context, input *GetGGRInput) (*G
 	return result, nil
 }
 
-// statsCacheKey builds a Redis key for a stat result. Dates are normalised to
-// UTC day strings so that queries spanning the same calendar days share a cache
-// entry regardless of the exact time-of-day component in the filter.
+type GetWagerPercentileInput struct {
+	UserID bson.ObjectID
+	From   *time.Time
+	To     *time.Time
+}
+
+type WagerPercentileResult struct {
+	UserID        string `json:"userId"`
+	TotalUSD      string `json:"totalUSD"`
+	Rank          int    `json:"rank"`
+	TotalUsers    int    `json:"totalUsers"`
+	TopPercentile string `json:"topPercentile"` // rank/totalUsers*100, e.g. "2.00" means top 2%
+}
+
+func (s *TransactionService) GetWagerPercentile(ctx context.Context, input *GetWagerPercentileInput) (*WagerPercentileResult, error) {
+	if input == nil {
+		return nil, errors.New("input must not be nil")
+	}
+
+	if s.redis != nil {
+		key := userStatsCacheKey("wager_percentile", input.UserID.Hex(), input.From, input.To)
+		if cached, err := s.redis.Get(ctx, key).Bytes(); err == nil {
+			var result WagerPercentileResult
+			if json.Unmarshal(cached, &result) == nil {
+				return &result, nil
+			}
+		}
+	}
+
+	rank, err := s.repo.GetUserWagerRank(ctx, input.UserID, repository.WagerRankFilter{
+		From: input.From,
+		To:   input.To,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	userRank := rank.Rank
+	totalUsers := rank.TotalUsers
+	totalUSD := decimal.Zero
+
+	if rank.Found {
+		totalUSD, _ = decimal.NewFromString(rank.TotalUSD)
+	} else {
+		// User had no wagers in the period — place them last.
+		totalUsers++
+		userRank = totalUsers
+	}
+
+	topPercentile := decimal.NewFromInt(int64(userRank)).
+		Div(decimal.NewFromInt(int64(totalUsers))).
+		Mul(decimal.NewFromInt(100)).
+		StringFixed(2)
+
+	result := &WagerPercentileResult{
+		UserID:        input.UserID.Hex(),
+		TotalUSD:      totalUSD.StringFixed(2),
+		Rank:          userRank,
+		TotalUsers:    totalUsers,
+		TopPercentile: topPercentile,
+	}
+
+	if s.redis != nil {
+		key := userStatsCacheKey("wager_percentile", input.UserID.Hex(), input.From, input.To)
+		if data, err := json.Marshal(result); err == nil {
+			s.redis.Set(ctx, key, data, s.cacheTTL)
+		}
+	}
+
+	return result, nil
+}
+
+// statsCacheKey builds a Redis key for a global stat result (GGR, daily wager volume).
+// Dates are normalised to UTC day strings so queries spanning the same calendar days
+// share a cache entry regardless of the exact time-of-day component in the filter.
 func statsCacheKey(prefix string, from, to *time.Time) string {
 	fromStr, toStr := "all", "all"
 	if from != nil {
@@ -320,4 +392,9 @@ func statsCacheKey(prefix string, from, to *time.Time) string {
 		toStr = to.UTC().Format("2006-01-02")
 	}
 	return fmt.Sprintf("%s:%s:%s", prefix, fromStr, toStr)
+}
+
+// userStatsCacheKey is like statsCacheKey but scoped to a specific user.
+func userStatsCacheKey(prefix, userID string, from, to *time.Time) string {
+	return fmt.Sprintf("%s:%s", userID, statsCacheKey(prefix, from, to))
 }

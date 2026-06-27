@@ -33,9 +33,12 @@ When a repo returns flat rows that need to be grouped for the response (e.g. `(d
 
 ## Redis caching for stat endpoints
 
-`GetGGR` and `GetDailyWagerVolume` wrap their repo calls with a Redis cache:
+`GetGGR`, `GetDailyWagerVolume`, and `GetWagerPercentile` all wrap their repo calls with a Redis cache. The pattern is the same in every method:
 
-1. Build the key with `statsCacheKey(prefix, from, to)` — normalises `*time.Time` pointers to UTC day strings (`"2006-01-02"`), so queries spanning the same calendar days share one entry.
+1. Build the cache key:
+   - Global stats: `statsCacheKey(prefix, from, to)` — e.g. `ggr:2024-01-01:2024-01-31`
+   - User-scoped stats: `userStatsCacheKey(prefix, userID, from, to)` — e.g. `{userId}:wager_percentile:2024-01-01:2024-01-31`
+   Both helpers normalise `*time.Time` pointers to UTC day strings (`"2006-01-02"`) so queries over the same calendar days share one entry.
 2. Attempt `redis.Get`; on hit, unmarshal JSON and return early.
 3. On miss, call the repo, build the result, then `redis.Set` with `s.cacheTTL`.
 4. Both the `redis` client and `cacheTTL` are injected via `TransactionServiceOptions` — nil `redis` silently skips caching (useful in tests).

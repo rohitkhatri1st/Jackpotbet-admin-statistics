@@ -28,3 +28,16 @@ paths:
 - `bson.Decimal128` amounts are returned as `.String()` decimal strings at the repository boundary — the service layer uses `shopspring/decimal` for arithmetic.
 - Sort paginated queries by `_id` ascending; use `$gt: cursor` for the next-page filter.
 - Fetch `limit+1` in the service layer to detect next-page existence, not in the repo — the repo just applies whatever limit it receives.
+
+## Rank / window functions
+
+When a query needs a single user's rank among all users, avoid returning the full list to the application. Use `$setWindowFields` + `$facet` to let MongoDB assign the rank and return only one document:
+
+```
+$match → $group (one doc per user) → $facet {
+  "userRank": [ $setWindowFields { sortBy, output: { rank: $rank } }, $match targetUser ]
+  "total":    [ $count "n" ]
+}
+```
+
+`$facet` always returns exactly one document regardless of dataset size. The `userRank` sub-array is empty when the user had no activity in the period (handle in the service). See `buildUserWagerRankPipeline` in `repository/mongo/transaction.go` for the canonical implementation.

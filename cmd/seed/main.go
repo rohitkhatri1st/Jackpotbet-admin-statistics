@@ -49,6 +49,45 @@ var (
 	}
 )
 
+func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
+
+	mongoDB := db.NewMongoDB(cfg.MongoConfig)
+	ctx := context.Background()
+	if err := mongoDB.Connect(ctx); err != nil {
+		log.Fatalf("failed to connect to mongodb: %v", err)
+	}
+	defer mongoDB.Disconnect(ctx)
+
+	repo := mongorepo.NewTransactionRepository(mongoDB.DB)
+
+	// Generate all user IDs upfront — these are reused across every round so
+	// the same 700 users appear throughout the entire dataset.
+	userIDs := make([]bson.ObjectID, numUsers)
+	for i := range userIDs {
+		userIDs[i] = bson.NewObjectID()
+	}
+
+	// Cap workers at 20 even on beefy machines — beyond that, Mongo connection
+	// overhead and channel contention outweigh the gains.
+	buildWorkers := min(runtime.NumCPU(), 20)
+	insertWorkers := min(runtime.NumCPU(), 20)
+
+	fmt.Printf("seeding %d rounds (%d docs) with %d build / %d insert workers...\n",
+		totalRounds, totalRounds*2, buildWorkers, insertWorkers)
+	start := time.Now()
+
+	// Wire up the three stages. Each stage returns a channel that the next reads from.
+	jobs := roundGenStage(totalRounds, batchSize, userIDs)
+	batches := buildStage(jobs, buildWorkers)
+	insertStage(batches, insertWorkers, repo, ctx) // blocks until done
+
+	fmt.Printf("done: %d docs in %.1fs\n", int64(totalRounds)*2, time.Since(start).Seconds())
+}
+
 // roundJob tells a build worker which slice of rounds to generate.
 // start/end are just index bounds — what matters is end-start (the count).
 type roundJob struct {
@@ -182,43 +221,4 @@ func makeTransaction(userID bson.ObjectID, roundID, txType, currency string, amo
 		Currency:  currency,
 		USDAmount: usdD128,
 	}
-}
-
-func main() {
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
-	}
-
-	mongoDB := db.NewMongoDB(cfg.MongoConfig)
-	ctx := context.Background()
-	if err := mongoDB.Connect(ctx); err != nil {
-		log.Fatalf("failed to connect to mongodb: %v", err)
-	}
-	defer mongoDB.Disconnect(ctx)
-
-	repo := mongorepo.NewTransactionRepository(mongoDB.DB)
-
-	// Generate all user IDs upfront — these are reused across every round so
-	// the same 700 users appear throughout the entire dataset.
-	userIDs := make([]bson.ObjectID, numUsers)
-	for i := range userIDs {
-		userIDs[i] = bson.NewObjectID()
-	}
-
-	// Cap workers at 20 even on beefy machines — beyond that, Mongo connection
-	// overhead and channel contention outweigh the gains.
-	buildWorkers := min(runtime.NumCPU(), 20)
-	insertWorkers := min(runtime.NumCPU(), 20)
-
-	fmt.Printf("seeding %d rounds (%d docs) with %d build / %d insert workers...\n",
-		totalRounds, totalRounds*2, buildWorkers, insertWorkers)
-	start := time.Now()
-
-	// Wire up the three stages. Each stage returns a channel that the next reads from.
-	jobs := roundGenStage(totalRounds, batchSize, userIDs)
-	batches := buildStage(jobs, buildWorkers)
-	insertStage(batches, insertWorkers, repo, ctx) // blocks until done
-
-	fmt.Printf("done: %d docs in %.1fs\n", int64(totalRounds)*2, time.Since(start).Seconds())
 }

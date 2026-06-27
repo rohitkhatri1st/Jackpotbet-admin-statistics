@@ -43,10 +43,28 @@ type DailyWagerVolumeEntry struct {
 	VolumeUSD string // decimal string
 }
 
+type WagerRankFilter struct {
+	From *time.Time
+	To   *time.Time
+}
+
+// UserWagerRank holds the result of a single user's wager rank lookup.
+// Found is false when the user had no wagers in the requested period.
+type UserWagerRank struct {
+	Found      bool
+	TotalUSD   string // decimal string; meaningful only when Found is true
+	Rank       int    // 1-indexed position; meaningful only when Found is true
+	TotalUsers int    // total distinct users who wagered in the period
+}
+
 type TransactionRepository interface {
 	GetTransactions(ctx context.Context, filter TransactionFilter) ([]model.Transaction, error)
 	CreateTransaction(ctx context.Context, t model.Transaction) error
 	BulkInsertTransactions(ctx context.Context, transactions []model.Transaction) error
 	GetGGR(ctx context.Context, filter GGRFilter) ([]CurrencyTotals, error)
 	GetDailyWagerVolume(ctx context.Context, filter DailyWagerVolumeFilter) ([]DailyWagerVolumeEntry, error)
+	// GetUserWagerRank returns the requesting user's rank among all users by total USD
+	// wagered in the given period. MongoDB assigns the rank via $setWindowFields so only
+	// one document is returned to the application regardless of how many users exist.
+	GetUserWagerRank(ctx context.Context, userID bson.ObjectID, filter WagerRankFilter) (UserWagerRank, error)
 }

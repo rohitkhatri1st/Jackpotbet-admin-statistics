@@ -39,4 +39,5 @@ func (a *API) internalRoutes() {
 	r.HandleFunc("/transactions", a.createTransaction).Methods(http.MethodPost)
 	r.HandleFunc("/gross_gaming_rev", a.getGrossGamingRevenue).Methods(http.MethodGet)
 	r.HandleFunc("/daily_wager_volume", a.getDailyWagerVolume).Methods(http.MethodGet)
+	r.HandleFunc("/user/{userId}/wager_percentile", a.getWagerPercentile).Methods(http.MethodGet)
 }
