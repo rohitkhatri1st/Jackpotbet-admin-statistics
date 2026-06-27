@@ -65,3 +65,5 @@ Creating required APIs
 Creating gross_gaming_rev api
 
 Creating an ensure index code and minor code refactoring to support that
+
+Creating claude rules and context
