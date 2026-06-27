@@ -109,6 +109,8 @@ Plan to introduce proper materialized view caching and write mocks and tests.
 Writing integration tests for user wager api
 Writing integration tests for Gross Gaming Revenue, Daily Wager Percentile
 
+Note: All the test cases are written using Claude
+
 ## Makefile
 
 Creating a makefile to easily run tests and the project as well.

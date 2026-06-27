@@ -1,0 +1,7 @@
+{
+    "go.testTags": "integration",
+    "go.testTimeout": "60s",
+    "gopls": {
+        "build.buildFlags": ["-tags=integration"]
+    }
+}
