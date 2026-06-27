@@ -1,6 +1,7 @@
 package api
 
 import (
+	"admin-stats/schema"
 	"admin-stats/service"
 	"net/http"
 	"time"
@@ -8,13 +9,58 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+const (
+	defaultLimit = 20
+)
+
+type getTransactionsQuery struct {
+	schema.DateRangeFilter
+	Cursor string `qs:"cursor"`
+	Limit  int64  `qs:"limit" validate:"min=1,max=100"`
+}
+
 func (a *API) getTransactions(w http.ResponseWriter, r *http.Request) {
-	transactions, err := a.services.Transaction.GetTransactions(r.Context())
+	var query getTransactionsQuery
+	if err := a.DecodeQuery(r, &query); err != nil {
+		a.respondError(w, err)
+		return
+	}
+
+	if query.Limit == 0 {
+		query.Limit = defaultLimit
+	}
+
+	if err := a.validator.Validate(query); err != nil {
+		a.respondError(w, NewAppError(CodeValidation, err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	if err := query.DateRangeFilter.Validate(); err != nil {
+		a.respondError(w, NewAppError(CodeValidation, err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	var cursor *bson.ObjectID
+	if query.Cursor != "" {
+		id, err := bson.ObjectIDFromHex(query.Cursor)
+		if err != nil {
+			a.respondError(w, NewAppError(CodeValidation, "invalid cursor", http.StatusBadRequest))
+			return
+		}
+		cursor = &id
+	}
+
+	result, err := a.services.Transaction.GetTransactions(r.Context(), &service.GetTransactionsInput{
+		From:   query.From,
+		To:     query.To,
+		Cursor: cursor,
+		Limit:  query.Limit,
+	})
 	if err != nil {
 		a.respondError(w, err)
 		return
 	}
-	a.respond(w, http.StatusOK, transactions)
+	a.respond(w, http.StatusOK, result)
 }
 
 type createTransactionRequest struct {
@@ -37,7 +83,7 @@ func (a *API) createTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.validator.ValidateStruct(req); err != nil {
+	if err := a.validator.Validate(req); err != nil {
 		a.respondError(w, NewAppError(CodeValidation, err.Error(), http.StatusBadRequest))
 		return
 	}

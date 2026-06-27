@@ -7,7 +7,16 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/pasztorpisti/qs"
 )
+
+func (a *API) DecodeQuery(r *http.Request, dst any) error {
+	if err := qs.UnmarshalValues(dst, r.URL.Query()); err != nil {
+		return NewAppError(CodeValidation, err.Error(), http.StatusBadRequest)
+	}
+	return nil
+}
 
 func (a *API) DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 	if ct := r.Header.Get("Content-Type"); ct != "" && ct != "application/json" {

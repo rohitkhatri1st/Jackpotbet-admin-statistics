@@ -18,9 +18,9 @@ func NewValidator() *Validator {
 	return &Validator{validate: v}
 }
 
-// ValidateStruct validates a struct based on its `validate` tags.
+// Validate validates a struct based on its `validate` tags.
 // Returns nil if valid, or a formatted error describing all validation failures.
-func (v *Validator) ValidateStruct(s any) error {
+func (v *Validator) Validate(s any) error {
 	err := v.validate.Struct(s)
 	if err == nil {
 		return nil

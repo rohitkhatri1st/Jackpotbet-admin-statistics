@@ -6,6 +6,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/mux v1.8.1
+	github.com/pasztorpisti/qs v0.0.0-20171216220353-8d6c33ee906c
 	github.com/redis/go-redis/v9 v9.21.0
 	github.com/rs/zerolog v1.35.1
 	github.com/shopspring/decimal v1.4.0

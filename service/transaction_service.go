@@ -39,8 +39,45 @@ type CreateTransactionInput struct {
 	CreatedAt *time.Time
 }
 
-func (s *TransactionService) GetTransactions(ctx context.Context) ([]model.Transaction, error) {
-	return s.repo.GetTransactions(ctx)
+type GetTransactionsInput struct {
+	From   *time.Time
+	To     *time.Time
+	Cursor *bson.ObjectID
+	Limit  int64
+}
+
+type TransactionsResult struct {
+	Data   []model.Transaction `json:"data"`
+	Cursor *bson.ObjectID      `json:"cursor"`
+}
+
+func (s *TransactionService) GetTransactions(ctx context.Context, input *GetTransactionsInput) (*TransactionsResult, error) {
+	if input == nil {
+		return nil, errors.New("input must not be nil")
+	}
+
+	// Fetch one extra to determine if a next page exists.
+	transactions, err := s.repo.GetTransactions(ctx, repository.TransactionFilter{
+		From:   input.From,
+		To:     input.To,
+		Cursor: input.Cursor,
+		Limit:  input.Limit + 1,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var nextCursor *bson.ObjectID
+	if int64(len(transactions)) > input.Limit {
+		transactions = transactions[:input.Limit]
+		id := transactions[len(transactions)-1].ID
+		nextCursor = &id
+	}
+
+	return &TransactionsResult{
+		Data:   transactions,
+		Cursor: nextCursor,
+	}, nil
 }
 
 func (s *TransactionService) CreateTransaction(ctx context.Context, input *CreateTransactionInput) (*model.Transaction, error) {
