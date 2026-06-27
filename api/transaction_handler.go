@@ -76,6 +76,10 @@ type createTransactionRequest struct {
 	CreatedAt *time.Time `json:"createdAt"`
 }
 
+// createTransaction records a single Wager or Payout transaction.
+// It does not enforce round-level invariants (one wager + one payout per roundId,
+// matching currency across transactions in the same round) — assuming that is the caller's responsibility
+// for the sake of simplicity. We could add a service-level validation layer to enforce those invariants if needed.
 func (a *API) createTransaction(w http.ResponseWriter, r *http.Request) {
 	var req createTransactionRequest
 	if err := a.DecodeJSONBody(w, r, &req); err != nil {

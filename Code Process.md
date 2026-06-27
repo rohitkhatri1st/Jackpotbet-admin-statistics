@@ -51,3 +51,13 @@ Creating APIs for creating transactions to test the strucutre and then maybe reu
 Created getTransactions api to create a particular pattern that can be followed throughout and to test if creation api worked fine or not.
 
 Creating a separate date filter schema so that every api can use it whenever required
+
+Creating bulk insert repository layer to use it in the utility script that fills the db
+
+Creating the utility script.
+
+Creating stages in the utility script so that its easily manageable and understandable.
+
+Creating required APIs
+
+Creating gross_gaming_rev api

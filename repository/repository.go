@@ -18,4 +18,5 @@ type TransactionFilter struct {
 type TransactionRepository interface {
 	GetTransactions(ctx context.Context, filter TransactionFilter) ([]model.Transaction, error)
 	CreateTransaction(ctx context.Context, t model.Transaction) error
+	BulkInsertTransactions(ctx context.Context, transactions []model.Transaction) error
 }

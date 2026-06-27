@@ -28,6 +28,18 @@ func (r *TransactionRepository) CreateTransaction(ctx context.Context, t model.T
 	return err
 }
 
+func (r *TransactionRepository) BulkInsertTransactions(ctx context.Context, transactions []model.Transaction) error {
+	if len(transactions) == 0 {
+		return nil
+	}
+	docs := make([]any, len(transactions))
+	for i, t := range transactions {
+		docs[i] = t
+	}
+	_, err := r.collection.InsertMany(ctx, docs)
+	return err
+}
+
 func (r *TransactionRepository) GetTransactions(ctx context.Context, filter repository.TransactionFilter) ([]model.Transaction, error) {
 	query := buildGetTransactionsQuery(filter)
 	opts := options.Find().SetLimit(filter.Limit).SetSort(bson.D{{Key: "_id", Value: 1}})
