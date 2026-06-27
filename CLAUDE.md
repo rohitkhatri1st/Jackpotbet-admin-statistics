@@ -27,7 +27,7 @@ Config is loaded from `conf/default.toml`. Copy `conf/sample.toml` to `conf/defa
 
 Three-layer: **Handler → Service → Repository**. No domain/event layers — intentional given the bounded, read-heavy scope.
 
-```
+```text
 main.go              entry point + graceful shutdown
 server/              HTTP server wiring
   server.go          Server struct + Start/Stop
@@ -81,7 +81,7 @@ conf/                TOML config files (default.toml, test.toml, sample.toml)
 All routes are prefixed with `/internal` and require `Authorization: <internal_token>` header.
 
 | Method | Path | Description |
-|--------|------|-------------|
+| -------- | ------ | ------------- |
 | GET | `/internal/transactions` | Paginated transaction list with optional date filter |
 | POST | `/internal/transactions` | Create a single transaction |
 | GET | `/internal/gross_gaming_rev` | GGR per currency + USD over a date range |
