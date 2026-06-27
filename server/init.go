@@ -9,6 +9,7 @@ import (
 	"context"
 	"io"
 	"log"
+	"time"
 )
 
 // ---- Loggers ----------------------------------------------------------------
@@ -74,8 +75,13 @@ func (s *Server) initTransactionRepo() *mongorepo.TransactionRepository {
 // ---- Services ---------------------------------------------------------------
 
 func (s *Server) InitServices() {
+	ttlHours := s.Config.RedisConfig.CacheTTLHours
+	cacheTTL := time.Duration(ttlHours) * time.Hour // 0h → NewTransactionService defaults to 24h
+
 	s.Services = service.NewServices(&service.ServicesOptions{
-		Repos: s.Repos,
-		Log:   s.Log,
+		Repos:    s.Repos,
+		Log:      s.Log,
+		Redis:    s.Redis.Client,
+		CacheTTL: cacheTTL,
 	})
 }

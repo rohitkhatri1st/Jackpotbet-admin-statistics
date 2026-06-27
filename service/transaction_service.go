@@ -5,9 +5,12 @@ import (
 	"admin-stats/repository"
 	"admin-stats/server/logger"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
@@ -16,18 +19,43 @@ type TransactionService struct {
 	repo        repository.TransactionRepository
 	log         logger.Logger
 	rateService RateService
+	// Simple Redis key-based caching for stat endpoints (GGR, daily wager volume).
+	// Each unique (from, to) date pair is stored as a JSON blob with a configurable TTL.
+	//
+	// A better approach for production would be a materialized view pattern:
+	//   - A `daily_stats` MongoDB collection stores pre-computed wager/payout totals
+	//     per (date, currency), populated nightly by a cron job.
+	//   - GGR sums `daily_stats` instead of scanning raw transactions (O(days) not O(millions)).
+	//   - Daily wager volume reads from `daily_stats` directly.
+	//   - Redis caches those reads — only today's bucket ever changes, making invalidation trivial.
+	//
+	// However, the materialized view introduces non-trivial complexity: the cron must handle
+	// DB corrections (e.g. backdated transactions inserted manually), cache invalidation must
+	// be coordinated across the nightly recompute and any manual correction flow, and the
+	// recompute window (how many past days to redo) needs to be tuned carefully. For the scope
+	// of this assignment, simple TTL-based caching is used instead.
+	redis    *redis.Client
+	cacheTTL time.Duration
 }
 
 type TransactionServiceOptions struct {
-	Repo repository.TransactionRepository
-	Log  logger.Logger
+	Repo     repository.TransactionRepository
+	Log      logger.Logger
+	Redis    *redis.Client
+	CacheTTL time.Duration // defaults to 24h if zero
 }
 
 func NewTransactionService(opts *TransactionServiceOptions) *TransactionService {
+	ttl := opts.CacheTTL
+	if ttl == 0 {
+		ttl = 24 * time.Hour
+	}
 	return &TransactionService{
 		repo:        opts.Repo,
 		log:         opts.Log,
 		rateService: NewStaticRateService(),
+		redis:       opts.Redis,
+		cacheTTL:    ttl,
 	}
 }
 
@@ -95,9 +123,9 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, input *Creat
 	amount, _ := bson.ParseDecimal128(input.Amount)
 	usd, _ := bson.ParseDecimal128(usdAmount)
 
-	createdAt := time.Now()
+	createdAt := time.Now().UTC()
 	if input.CreatedAt != nil {
-		createdAt = *input.CreatedAt
+		createdAt = input.CreatedAt.UTC()
 	}
 
 	t := &model.Transaction{
@@ -142,6 +170,16 @@ func (s *TransactionService) GetDailyWagerVolume(ctx context.Context, input *Get
 		return nil, errors.New("input must not be nil")
 	}
 
+	if s.redis != nil {
+		key := statsCacheKey("daily_wager", input.From, input.To)
+		if cached, err := s.redis.Get(ctx, key).Bytes(); err == nil {
+			var result DailyWagerVolumeResult
+			if json.Unmarshal(cached, &result) == nil {
+				return &result, nil
+			}
+		}
+	}
+
 	rows, err := s.repo.GetDailyWagerVolume(ctx, repository.DailyWagerVolumeFilter{
 		From: input.From,
 		To:   input.To,
@@ -150,7 +188,16 @@ func (s *TransactionService) GetDailyWagerVolume(ctx context.Context, input *Get
 		return nil, err
 	}
 
-	return groupDailyWagersByDate(rows), nil
+	result := groupDailyWagersByDate(rows)
+
+	if s.redis != nil {
+		key := statsCacheKey("daily_wager", input.From, input.To)
+		if data, err := json.Marshal(result); err == nil {
+			s.redis.Set(ctx, key, data, s.cacheTTL)
+		}
+	}
+
+	return result, nil
 }
 
 // groupDailyWagersByDate converts flat (date, currency) repo rows into one
@@ -211,6 +258,16 @@ func (s *TransactionService) GetGGR(ctx context.Context, input *GetGGRInput) (*G
 		return nil, errors.New("input must not be nil")
 	}
 
+	if s.redis != nil {
+		key := statsCacheKey("ggr", input.From, input.To)
+		if cached, err := s.redis.Get(ctx, key).Bytes(); err == nil {
+			var result GGRResult
+			if json.Unmarshal(cached, &result) == nil {
+				return &result, nil
+			}
+		}
+	}
+
 	totals, err := s.repo.GetGGR(ctx, repository.GGRFilter{
 		From: input.From,
 		To:   input.To,
@@ -239,5 +296,28 @@ func (s *TransactionService) GetGGR(ctx context.Context, input *GetGGRInput) (*G
 		})
 	}
 
-	return &GGRResult{Data: entries}, nil
+	result := &GGRResult{Data: entries}
+
+	if s.redis != nil {
+		key := statsCacheKey("ggr", input.From, input.To)
+		if data, err := json.Marshal(result); err == nil {
+			s.redis.Set(ctx, key, data, s.cacheTTL)
+		}
+	}
+
+	return result, nil
+}
+
+// statsCacheKey builds a Redis key for a stat result. Dates are normalised to
+// UTC day strings so that queries spanning the same calendar days share a cache
+// entry regardless of the exact time-of-day component in the filter.
+func statsCacheKey(prefix string, from, to *time.Time) string {
+	fromStr, toStr := "all", "all"
+	if from != nil {
+		fromStr = from.UTC().Format("2006-01-02")
+	}
+	if to != nil {
+		toStr = to.UTC().Format("2006-01-02")
+	}
+	return fmt.Sprintf("%s:%s:%s", prefix, fromStr, toStr)
 }

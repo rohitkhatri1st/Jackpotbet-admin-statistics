@@ -32,4 +32,6 @@ db_name = "jackpotbet"
 [redis]
 addr = "localhost:6379"
 password = ""
-db = 0  # 0 = default db; use a different number for test environments
+db = 0              # 0 = default db; use a different number for test environments
+max_memory = ""     # e.g. "256mb"; leave empty to let the operator manage Redis memory limits
+cache_ttl_hours = 24

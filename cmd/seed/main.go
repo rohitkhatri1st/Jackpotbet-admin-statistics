@@ -89,7 +89,7 @@ func buildStage(in <-chan roundJob, workers int) <-chan []model.Transaction {
 			rng := rand.New(rand.NewSource(rand.Int63()))
 
 			// Compute the time window once per worker, not once per round.
-			now := time.Now()
+			now := time.Now().UTC()
 			yearAgo := now.AddDate(-1, 0, 0)
 			window := now.Sub(yearAgo) // ~8760 hours as a Duration, used for random offset
 

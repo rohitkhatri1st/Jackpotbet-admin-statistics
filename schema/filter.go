@@ -12,7 +12,17 @@ type DateRangeFilter struct {
 	To   *time.Time `qs:"to"`
 }
 
-func (f DateRangeFilter) Validate() error {
+// Validate normalises From/To to UTC (clients may send any timezone offset) and
+// checks that From is before To when both are present.
+func (f *DateRangeFilter) Validate() error {
+	if f.From != nil {
+		t := f.From.UTC()
+		f.From = &t
+	}
+	if f.To != nil {
+		t := f.To.UTC()
+		f.To = &t
+	}
 	if f.From != nil && f.To != nil && !f.From.Before(*f.To) {
 		return errors.New("'from' must be before 'to'")
 	}

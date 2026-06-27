@@ -35,9 +35,11 @@ type MongoConfig struct {
 }
 
 type RedisConfig struct {
-	Addr     string `mapstructure:"addr"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
+	Addr          string `mapstructure:"addr"`
+	Password      string `mapstructure:"password"`
+	DB            int    `mapstructure:"db"`
+	MaxMemory     string `mapstructure:"max_memory"`    // e.g. "256mb"; empty = leave to operator
+	CacheTTLHours int    `mapstructure:"cache_ttl_hours"`
 }
 
 type LoggerConfig struct {

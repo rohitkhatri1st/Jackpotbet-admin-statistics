@@ -69,3 +69,9 @@ Creating an ensure index code and minor code refactoring to support that
 Creating claude rules and context
 
 Creating API for Daily Wager Volume
+
+Adding caching for the apis
+
+I am using normal redis key based caching for now however a better way would be to use materialized pattern based caching like introducing a mongo collection that caches daily wagers and then we fetch data using that collection for daily wagers and run a cron for the same. Also we can use that same data to get the gross gaming revenue as well by combining all of it. For the sake of simplicity I have not introduced that, however we may introduce it in near future as per requirement.
+
+Making UTC Time throughout our codebase
