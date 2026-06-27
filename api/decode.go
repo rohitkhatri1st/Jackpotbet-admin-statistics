@@ -40,6 +40,9 @@ func decodeErrToAppError(err error) *AppError {
 	case errors.Is(err, io.ErrUnexpectedEOF):
 		return NewAppError(CodeValidation, "malformed JSON", http.StatusBadRequest)
 	case errors.As(err, &typeErr):
+		if typeErr.Field == "" {
+			return NewAppError(CodeValidation, fmt.Sprintf("invalid value of type %s at position %d", typeErr.Value, typeErr.Offset), http.StatusBadRequest)
+		}
 		return NewAppError(CodeValidation, fmt.Sprintf("invalid value for field %q at position %d", typeErr.Field, typeErr.Offset), http.StatusBadRequest)
 	case strings.HasPrefix(err.Error(), "json: unknown field "):
 		field := strings.TrimPrefix(err.Error(), "json: unknown field ")

@@ -30,9 +30,11 @@ func (a *API) userRoutes() {
 }
 
 // internalRoutes registers endpoints restricted to internal/admin callers.
+// currently this uses a static token as per assignment's requirement, but could be swapped for a more robust auth system in the future.
 func (a *API) internalRoutes() {
 	r := a.router.PathPrefix("/internal").Subrouter()
 	r.Use(a.internalAuthMiddleware)
 
 	r.HandleFunc("/transactions", a.getTransactions).Methods(http.MethodGet)
+	r.HandleFunc("/transactions", a.createTransaction).Methods(http.MethodPost)
 }

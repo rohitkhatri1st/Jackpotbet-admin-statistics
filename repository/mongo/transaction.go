@@ -22,6 +22,11 @@ func NewTransactionRepository(db *driver.Database) *TransactionRepository {
 	}
 }
 
+func (r *TransactionRepository) CreateTransaction(ctx context.Context, t model.Transaction) error {
+	_, err := r.collection.InsertOne(ctx, t)
+	return err
+}
+
 func (r *TransactionRepository) GetTransactions(ctx context.Context) ([]model.Transaction, error) {
 	cursor, err := r.collection.Find(ctx, bson.D{})
 	if err != nil {
