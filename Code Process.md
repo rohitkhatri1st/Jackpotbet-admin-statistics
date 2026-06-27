@@ -45,3 +45,7 @@ Making a better validator package with underlying playground validator for more 
 Creating a decodeJsonBody function for better json decoding and error handling
 
 Creating methods that can respond to the apis in a structured and controlled way.
+
+Creating APIs for creating transactions to test the strucutre and then maybe reuse its code to write the utility script to add transactions data as well as per the assignments requirement
+
+Created getTransactions api to create a particular pattern that can be followed throughout and to test if creation api worked fine or not.
