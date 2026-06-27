@@ -7,7 +7,7 @@ paths:
 
 ## Responsibilities
 
-The service layer owns business logic: computing GGR, pagination cursor handling, USD conversion. It must not import `net/http` or `bson` — the only `bson` exception is `bson.ObjectID` used as a cursor identifier.
+The service layer owns business logic: computing GGR, daily wager volume grouping, pagination cursor handling, USD conversion. It must not import `net/http` or `bson` — the only `bson` exception is `bson.ObjectID` used as a cursor identifier.
 
 ## Input/output types
 
@@ -18,6 +18,14 @@ The service layer owns business logic: computing GGR, pagination cursor handling
 ## Currency conversion
 
 - `rateService` (set to `NewStaticRateService()` in `NewTransactionService`) handles currency → USD. Call `s.rateService.ToUSD(ctx, currency, amount)` — don't inline rates in service methods.
+
+## Grouping / reshaping repo results
+
+When a repo returns flat rows that need to be grouped for the response (e.g. `(date, currency)` rows → one entry per date), extract the grouping into a **pure helper function** — not inside the service method. Pattern from `groupDailyWagersByDate`:
+
+- Use a `[]string` slice (`dateOrder`) alongside a `map[string]T` (`buckets`) to accumulate data while preserving the sort order returned by the repository.
+- Per-currency results use `map[string]CurrencyVolume` — never a fixed struct with named currency fields. The currency set is extensible.
+- The service method itself stays thin: nil guard → repo call → delegate to helper.
 
 ## Pagination
 

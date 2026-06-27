@@ -6,6 +6,34 @@ import (
 	"net/http"
 )
 
+type getDailyWagerVolumeQuery struct {
+	schema.DateRangeFilter
+}
+
+func (a *API) getDailyWagerVolume(w http.ResponseWriter, r *http.Request) {
+	var query getDailyWagerVolumeQuery
+	if err := a.DecodeQuery(r, &query); err != nil {
+		a.respondError(w, err)
+		return
+	}
+
+	if err := query.DateRangeFilter.Validate(); err != nil {
+		a.respondError(w, NewAppError(CodeValidation, err.Error(), http.StatusBadRequest))
+		return
+	}
+
+	result, err := a.services.Transaction.GetDailyWagerVolume(r.Context(), &service.GetDailyWagerVolumeInput{
+		From: query.From,
+		To:   query.To,
+	})
+	if err != nil {
+		a.respondError(w, err)
+		return
+	}
+
+	a.respond(w, http.StatusOK, result)
+}
+
 type getGGRQuery struct {
 	schema.DateRangeFilter
 }

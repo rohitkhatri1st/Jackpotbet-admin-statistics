@@ -52,6 +52,7 @@ repository/
   mongo/             concrete MongoDB implementations
     transaction.go
     ggr.go
+    daily_wager_volume.go
 model/               raw BSON structs (Transaction)
 db/                  db connection wrappers (MongoDB, Redis)
 cmd/seed/main.go     standalone seeder — 3-stage concurrent pipeline (scheduler → builder → writer)
@@ -70,7 +71,7 @@ conf/                TOML config files (default.toml, test.toml, sample.toml)
 
 **Amounts:** Stored and returned as `bson.Decimal128`. Use `shopspring/decimal` in the service layer for arithmetic; convert to/from `bson.ParseDecimal128` at the repository boundary.
 
-**Currency:** Three supported values: `ETH`, `BTC`, `USDT`. Static USD rates live in `service/rate_service.go`. All transactions in a round share the same currency.
+**Currency:** Currently seeded with `ETH`, `BTC`, and `USDT`. Static USD rates live in `service/rate_service.go`. All transactions in a round share the same currency. The currency set is treated as open/extensible — do not hardcode the list in business logic; use `map[string]T` for per-currency results.
 
 **Pagination:** `GetTransactions` uses cursor-based pagination (ObjectID cursor). Fetch `limit+1`, trim to `limit`, return the last ID as the next cursor.
 
@@ -85,3 +86,4 @@ All routes are prefixed with `/internal` and require `Authorization: <internal_t
 | GET | `/internal/transactions` | Paginated transaction list with optional date filter |
 | POST | `/internal/transactions` | Create a single transaction |
 | GET | `/internal/gross_gaming_rev` | GGR per currency + USD over a date range |
+| GET | `/internal/daily_wager_volume` | Daily wager volume grouped by date, with per-currency breakdown and total USD |

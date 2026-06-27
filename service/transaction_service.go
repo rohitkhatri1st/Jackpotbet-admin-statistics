@@ -117,6 +117,76 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, input *Creat
 	return t, nil
 }
 
+type GetDailyWagerVolumeInput struct {
+	From *time.Time
+	To   *time.Time
+}
+
+type CurrencyVolume struct {
+	Volume    string `json:"volume"`
+	VolumeUSD string `json:"volumeUSD"`
+}
+
+type DailyVolumeEntry struct {
+	Date           string                    `json:"date"`
+	TotalVolumeUSD string                    `json:"totalVolumeUSD"`
+	Currencies     map[string]CurrencyVolume `json:"currencies"`
+}
+
+type DailyWagerVolumeResult struct {
+	Data []DailyVolumeEntry `json:"data"`
+}
+
+func (s *TransactionService) GetDailyWagerVolume(ctx context.Context, input *GetDailyWagerVolumeInput) (*DailyWagerVolumeResult, error) {
+	if input == nil {
+		return nil, errors.New("input must not be nil")
+	}
+
+	rows, err := s.repo.GetDailyWagerVolume(ctx, repository.DailyWagerVolumeFilter{
+		From: input.From,
+		To:   input.To,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return groupDailyWagersByDate(rows), nil
+}
+
+// groupDailyWagersByDate converts flat (date, currency) repo rows into one
+// DailyVolumeEntry per date, preserving the sort order returned by the repository.
+func groupDailyWagersByDate(rows []repository.DailyWagerVolumeEntry) *DailyWagerVolumeResult {
+	dateOrder := make([]string, 0)
+	totalUSDByDate := make(map[string]decimal.Decimal)
+	// map of [date -> [map of currency -> volume]]
+	currenciesByDate := make(map[string]map[string]CurrencyVolume)
+
+	for _, row := range rows {
+		if _, exists := currenciesByDate[row.Date]; !exists {
+			currenciesByDate[row.Date] = make(map[string]CurrencyVolume)
+			dateOrder = append(dateOrder, row.Date)
+		}
+		volume, _ := decimal.NewFromString(row.Volume)
+		volumeUSD, _ := decimal.NewFromString(row.VolumeUSD)
+		currenciesByDate[row.Date][row.Currency] = CurrencyVolume{
+			Volume:    volume.StringFixed(8),
+			VolumeUSD: volumeUSD.StringFixed(2),
+		}
+		totalUSDByDate[row.Date] = totalUSDByDate[row.Date].Add(volumeUSD)
+	}
+
+	result := make([]DailyVolumeEntry, 0, len(dateOrder))
+	for _, date := range dateOrder {
+		result = append(result, DailyVolumeEntry{
+			Date:           date,
+			TotalVolumeUSD: totalUSDByDate[date].StringFixed(2),
+			Currencies:     currenciesByDate[date],
+		})
+	}
+
+	return &DailyWagerVolumeResult{Data: result}
+}
+
 type GetGGRInput struct {
 	From *time.Time
 	To   *time.Time
