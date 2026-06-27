@@ -2,9 +2,9 @@ package api
 
 import (
 	"admin-stats/server/logger"
+	"admin-stats/server/validator"
 	"admin-stats/service"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
 )
 
@@ -14,7 +14,7 @@ type API struct {
 	log    logger.Logger
 	// forceLog is a logger that always logs to console, regardless of the configuration.
 	forceLog               logger.Logger
-	validator              *validator.Validate
+	validator              *validator.Validator
 	services               *service.Services
 	internalAuthMiddleware mux.MiddlewareFunc
 }
@@ -23,7 +23,7 @@ type Options struct {
 	Router                 *mux.Router
 	Log                    logger.Logger
 	ForceLog               logger.Logger
-	Validator              *validator.Validate
+	Validator              *validator.Validator
 	Services               *service.Services
 	InternalAuthMiddleware mux.MiddlewareFunc
 }

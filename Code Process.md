@@ -8,6 +8,12 @@ Created initial structure with empty folders
 
 wrote main.go
 
+Choosing 3-layer architecture Handler → Service → Repository, since we want http parsing, then business logic and then db aggregation. If it were only crud we would have eliminated business/service layer, and creating more layers like domain/adapters would be an overkill for our operations that generally require interaction only within the system. Events are not required in the current scope, we may introduce them separately when required.
+
+Choosing repository pattern because we may want to create mongo pipelines and we must give those pipelines a place to sit.
+
+Following SOLID Principles for least code complexity.
+
 Created server package
 
 Create logger
@@ -29,3 +35,13 @@ Created all services as easily swappable interfaces
 Checked if logger is easily swappable or not to ensure structural integrity
 
 Made the entire interfaces and structure easily swappable and mockable for testing and keeping in mind about easy scaling or easily changing infra. However out of scope of this project but necessary
+
+Now making routes
+
+Making a create transaction route so that its code may be reused to easily create the utility script to fill data as per the requirement of assignment.
+
+Making a better validator package with underlying playground validator for more control over it
+
+Creating a decodeJsonBody function for better json decoding and error handling
+
+Creating methods that can respond to the apis in a structured and controlled way.

@@ -6,6 +6,7 @@ import (
 )
 
 func (a *API) registerRoutes() {
+	// May move them to different files if the number of routes grows too large.
 	a.openRoutes()
 	a.userRoutes()
 	a.internalRoutes()
@@ -14,6 +15,9 @@ func (a *API) registerRoutes() {
 // openRoutes registers endpoints that require no authentication.
 func (a *API) openRoutes() {
 	// add open routes to a.router directly
+	r := a.router.PathPrefix("").Subrouter()
+
+	_ = r // remove once routes are added
 }
 
 // userRoutes registers endpoints that require a valid user session.

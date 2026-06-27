@@ -15,7 +15,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-playground/validator/v10"
+	"admin-stats/server/validator"
 	gorillahandlers "github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 )
@@ -141,7 +141,7 @@ func NewServer() *Server {
 		Router:                 r,
 		Log:                    server.Log,
 		ForceLog:               server.ForceLog,
-		Validator:              validator.New(),
+		Validator:              validator.NewValidator(),
 		Services:               server.Services,
 		InternalAuthMiddleware: middleware.InternalAuth(server.Log, server.Config.AuthConfig.InternalToken),
 	})
