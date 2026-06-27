@@ -103,3 +103,12 @@ Also added Redis caching to the percentile endpoint.
 ## What's Next
 
 Plan to introduce proper materialized view caching and write mocks and tests.
+
+## Testing
+
+Writing integration tests for user wager api
+Writing integration tests for Gross Gaming Revenue, Daily Wager Percentile
+
+## Makefile
+
+Creating a makefile to easily run tests and the project as well.

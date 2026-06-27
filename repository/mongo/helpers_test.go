@@ -4,6 +4,7 @@ package mongo_test
 
 import (
 	"admin-stats/model"
+	"admin-stats/repository"
 	"context"
 	"testing"
 	"time"
@@ -58,18 +59,26 @@ func assertDecimalEqual(t *testing.T, label, got, want string) {
 
 // ── Transaction insert helpers ────────────────────────────────────────────
 
-// insertTx is the base helper. insertWager and insertPayout delegate here so
-// the only difference between them is the Type field — same pattern as the
-// production service layer delegating to thin repo methods.
-func insertTx(t *testing.T, txType string, userID bson.ObjectID, usdAmount string, at time.Time) {
+// insertTx is the base helper all typed wrappers delegate to.
+// currency defaults to "USDT" and amount to "10.00" when passed as empty strings,
+// which is sufficient for tests that only care about usdAmount (e.g. rank tests).
+// Pass explicit values when the test needs to verify currency-specific aggregation
+// (e.g. GGR, daily wager volume).
+func insertTx(t *testing.T, txType string, userID bson.ObjectID, currency, amount, usdAmount string, at time.Time) {
 	t.Helper()
+	if currency == "" {
+		currency = "USDT"
+	}
+	if amount == "" {
+		amount = "10.00"
+	}
 	tx := model.Transaction{
 		ID:        bson.NewObjectID(),
 		UserID:    userID,
 		RoundID:   "round-test",
 		Type:      txType,
-		Amount:    decimal128("10.00"),
-		Currency:  "USDT",
+		Amount:    decimal128(amount),
+		Currency:  currency,
 		USDAmount: decimal128(usdAmount),
 		CreatedAt: at,
 	}
@@ -78,16 +87,47 @@ func insertTx(t *testing.T, txType string, userID bson.ObjectID, usdAmount strin
 	}
 }
 
-// insertWager inserts a single Wager transaction for the given user.
-// Currency and native amount are fixed — aggregation pipelines rank on usdAmount only.
+// insertWager inserts a Wager with default currency (USDT) and native amount.
+// Sufficient for rank tests that only care about usdAmount.
 func insertWager(t *testing.T, userID bson.ObjectID, usdAmount string, at time.Time) {
 	t.Helper()
-	insertTx(t, "Wager", userID, usdAmount, at)
+	insertTx(t, "Wager", userID, "", "", usdAmount, at)
 }
 
-// insertPayout inserts a single Payout transaction.
-// Use it in tests that verify the pipeline correctly ignores non-Wager types.
+// insertPayout inserts a Payout with default currency (USDT) and native amount.
 func insertPayout(t *testing.T, userID bson.ObjectID, usdAmount string, at time.Time) {
 	t.Helper()
-	insertTx(t, "Payout", userID, usdAmount, at)
+	insertTx(t, "Payout", userID, "", "", usdAmount, at)
+}
+
+// ── Result lookup helpers ─────────────────────────────────────────────────
+
+// findCurrency locates a CurrencyTotals entry by currency code in a slice.
+// The GGR pipeline result order is non-deterministic (map iteration), so
+// tests must look up by currency rather than by index.
+func findCurrency(totals []repository.CurrencyTotals, currency string) (repository.CurrencyTotals, bool) {
+	for _, t := range totals {
+		if t.Currency == currency {
+			return t, true
+		}
+	}
+	return repository.CurrencyTotals{}, false
+}
+
+// findDailyEntry locates a DailyWagerVolumeEntry by (date, currency) pair.
+// The pipeline sorts by (date, currency) so order is deterministic, but
+// lookup by key is safer than by index when sub-tests insert varying data.
+func findDailyEntry(entries []repository.DailyWagerVolumeEntry, date, currency string) (repository.DailyWagerVolumeEntry, bool) {
+	for _, e := range entries {
+		if e.Date == date && e.Currency == currency {
+			return e, true
+		}
+	}
+	return repository.DailyWagerVolumeEntry{}, false
+}
+
+// dateStr formats a time.Time as the "YYYY-MM-DD" string the pipeline produces
+// via $dateToString. Use this whenever a test needs to assert on Date fields.
+func dateStr(t time.Time) string {
+	return t.UTC().Format("2006-01-02")
 }
