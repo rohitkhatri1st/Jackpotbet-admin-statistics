@@ -23,6 +23,11 @@ go test ./service/...
 
 Config is loaded from `conf/default.toml`. Copy `conf/sample.toml` to `conf/default.toml` and set `auth.internal_token` before running. MongoDB and Redis must be running locally.
 
+New Redis config keys (optional):
+
+- `redis.max_memory` — e.g. `"256mb"`; empty string leaves memory limits to the operator.
+- `redis.cache_ttl_hours` — stat cache TTL in hours; defaults to 24h if zero or omitted.
+
 ## Architecture
 
 Three-layer: **Handler → Service → Repository**. No domain/event layers — intentional given the bounded, read-heavy scope.
@@ -74,6 +79,10 @@ conf/                TOML config files (default.toml, test.toml, sample.toml)
 **Currency:** Currently seeded with `ETH`, `BTC`, and `USDT`. Static USD rates live in `service/rate_service.go`. All transactions in a round share the same currency. The currency set is treated as open/extensible — do not hardcode the list in business logic; use `map[string]T` for per-currency results.
 
 **Pagination:** `GetTransactions` uses cursor-based pagination (ObjectID cursor). Fetch `limit+1`, trim to `limit`, return the last ID as the next cursor.
+
+**Caching:** `GetGGR` and `GetDailyWagerVolume` use simple Redis TTL-based caching. Cache keys are built by `statsCacheKey(prefix, from, to)` and normalised to UTC day strings so queries over the same calendar days share an entry. `db/redis.go` applies `allkeys-lru` eviction policy on connect and optionally sets `maxmemory`. A materialized view (`daily_stats` collection + nightly cron) would scale better, but is intentionally omitted due to the complexity of coordinating DB corrections and cache invalidation.
+
+**Time / UTC:** All timestamps are stored and returned in UTC. `time.Now()` must always be called as `time.Now().UTC()` at any persistence boundary. `schema.DateRangeFilter.Validate()` normalises client-supplied `from`/`to` to UTC before use — call it on every handler that embeds `DateRangeFilter`.
 
 **Config search paths:** Viper searches `../conf/`, `../../conf/`, `./`, `./conf/` — works whether running from the repo root or from `cmd/seed/`.
 

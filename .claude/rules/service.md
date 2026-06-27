@@ -31,6 +31,25 @@ When a repo returns flat rows that need to be grouped for the response (e.g. `(d
 
 - Fetch `limit+1` from the repo, trim to `limit`, set `nextCursor` to the last item's ID when the extra item exists. This is the canonical pattern — follow it for all paginated endpoints.
 
+## Redis caching for stat endpoints
+
+`GetGGR` and `GetDailyWagerVolume` wrap their repo calls with a Redis cache:
+
+1. Build the key with `statsCacheKey(prefix, from, to)` — normalises `*time.Time` pointers to UTC day strings (`"2006-01-02"`), so queries spanning the same calendar days share one entry.
+2. Attempt `redis.Get`; on hit, unmarshal JSON and return early.
+3. On miss, call the repo, build the result, then `redis.Set` with `s.cacheTTL`.
+4. Both the `redis` client and `cacheTTL` are injected via `TransactionServiceOptions` — nil `redis` silently skips caching (useful in tests).
+
+`ServicesOptions` accepts `Redis *redis.Client` and `CacheTTL time.Duration`; `server/init.go` reads `CacheTTLHours` from config and passes `s.Redis.Client`.
+
+## Time / UTC
+
+All `time.Time` values created or stored in the service must be UTC:
+
+- Use `time.Now().UTC()` — never bare `time.Now()` at a persistence boundary.
+- Normalise caller-supplied times: `input.CreatedAt.UTC()` before storing.
+- `statsCacheKey` already calls `.UTC()` on its inputs — no extra normalisation needed there.
+
 ## Registering a new service
 
 1. Add the struct to `service/<name>_service.go`.

@@ -10,7 +10,7 @@ paths:
 1. Decode input (`DecodeJSONBody` for POST, `DecodeQuery` for GET)
 2. Apply defaults (e.g. `if query.Limit == 0 { query.Limit = defaultLimit }`)
 3. Validate with `a.validator.Validate(...)` — returns a formatted error string, wrap as `NewAppError(CodeValidation, ..., http.StatusBadRequest)`
-4. Call `query.DateRangeFilter.Validate()` if the query embeds `schema.DateRangeFilter`
+4. Call `query.DateRangeFilter.Validate()` if the query embeds `schema.DateRangeFilter` — this normalises `From`/`To` to UTC in-place (pointer receiver) in addition to checking `from < to`
 5. Convert any raw values that need it (e.g. hex cursor string → `bson.ObjectID`)
 6. Call the service
 7. Respond with `a.respond(w, status, result)` or `a.respondError(w, err)`
