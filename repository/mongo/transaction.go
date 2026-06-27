@@ -23,6 +23,18 @@ func NewTransactionRepository(db *driver.Database) *TransactionRepository {
 	}
 }
 
+// EnsureIndexes creates the indexes required for efficient querying.
+// Safe to call on every startup — MongoDB skips creation if the index already exists.
+func (r *TransactionRepository) EnsureIndexes(ctx context.Context) error {
+	_, err := r.collection.Indexes().CreateMany(ctx, []driver.IndexModel{
+		// Covers date-range filtering in GetTransactions and GetGGR $match stage.
+		{Keys: bson.D{{Key: "createdAt", Value: 1}}},
+
+		{Keys: bson.D{{Key: "userId", Value: 1}}},
+	})
+	return err
+}
+
 func (r *TransactionRepository) CreateTransaction(ctx context.Context, t model.Transaction) error {
 	_, err := r.collection.InsertOne(ctx, t)
 	return err

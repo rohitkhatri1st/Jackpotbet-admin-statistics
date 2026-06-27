@@ -4,18 +4,18 @@ import (
 	"admin-stats/api"
 	"admin-stats/config"
 	"admin-stats/db"
-	mongorepo "admin-stats/repository/mongo"
+	"admin-stats/repository"
 	"admin-stats/server/logger"
 	"admin-stats/server/middleware"
+	"admin-stats/server/validator"
 	"admin-stats/service"
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
+	"reflect"
 	"time"
 
-	"admin-stats/server/validator"
 	gorillahandlers "github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 )
@@ -28,54 +28,9 @@ type Server struct {
 	Config     config.Config
 	MongoDB    *db.MongoDB
 	Redis      *db.RedisDB
+	Repos      *repository.Repos
 	Services   *service.Services
 	API        *api.API
-}
-
-func (s *Server) InitLoggers() {
-	var cw, fw io.Writer
-	if s.Config.LoggerConfig.EnableFileLogger {
-		fw = logger.NewFileWriter(
-			s.Config.LoggerConfig.FileLoggerConfig.FileName,
-			s.Config.LoggerConfig.FileLoggerConfig.Path,
-		)
-	}
-	if s.Config.LoggerConfig.EnableConsoleLogger {
-		cw = logger.NewZeroLogConsoleWriter(logger.NewStandardConsoleWriter())
-	}
-	s.Log = logger.NewZeroLogger(cw, fw)
-	s.ForceLog = logger.NewForceLogger(fw)
-}
-
-func (s *Server) InitDBs() {
-	s.initMongoDB()
-	s.initRedis()
-}
-
-func (s *Server) InitServices() {
-	repo := mongorepo.NewTransactionRepository(s.MongoDB.DB)
-	s.Services = service.NewServices(&service.ServicesOptions{
-		TransactionRepo: repo,
-		Log:             s.Log,
-	})
-}
-
-func (s *Server) initMongoDB() {
-	mongoDB := db.NewMongoDB(s.Config.MongoConfig)
-	if err := mongoDB.Connect(context.Background()); err != nil {
-		s.ForceLog.Error(err)
-		log.Fatalf("failed to connect to mongodb: %v", err)
-	}
-	s.MongoDB = mongoDB
-}
-
-func (s *Server) initRedis() {
-	redisDB := db.NewRedisDB(s.Config.RedisConfig)
-	if err := redisDB.Connect(context.Background()); err != nil {
-		s.ForceLog.Error(err)
-		log.Fatalf("failed to connect to redis: %v", err)
-	}
-	s.Redis = redisDB
 }
 
 func (s *Server) StartServer() {
@@ -136,6 +91,7 @@ func NewServer() *Server {
 	server.InitLoggers()
 	server.InitDBs()
 	server.InitServices()
+	server.validate()
 
 	server.API = api.New(&api.Options{
 		Router:                 r,
@@ -147,4 +103,41 @@ func NewServer() *Server {
 	})
 
 	return server
+}
+
+// validate fatals on startup if any field in Repos or Services was added but not initialized.
+// This catches the "added a new repo/service field but forgot to wire it" mistake immediately.
+func (s *Server) validate() {
+	checkNilFields(s.Repos, "Repos")
+	checkNilFields(s.Services, "Services")
+}
+
+func checkNilFields(v any, structName string) {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			log.Fatalf("%s is not initialized", structName)
+		}
+		rv = rv.Elem()
+	}
+	rt := rv.Type()
+	for i := range rv.NumField() {
+		field := rv.Field(i)
+		fieldName := rt.Field(i).Name
+		switch field.Kind() {
+		case reflect.Ptr:
+			if field.IsNil() {
+				log.Fatalf("%s.%s is not initialized — did you forget to wire it in init.go?", structName, fieldName)
+			}
+		case reflect.Interface:
+			if field.IsNil() {
+				log.Fatalf("%s.%s is not initialized — did you forget to wire it in init.go?", structName, fieldName)
+			}
+			// Guard against typed nils: interface is non-nil but wraps a nil pointer.
+			// e.g. var r repository.TransactionRepository = (*mongo.TransactionRepository)(nil)
+			if elem := field.Elem(); elem.Kind() == reflect.Ptr && elem.IsNil() {
+				log.Fatalf("%s.%s is a typed nil — its init function returned nil instead of a real value", structName, fieldName)
+			}
+		}
+	}
 }

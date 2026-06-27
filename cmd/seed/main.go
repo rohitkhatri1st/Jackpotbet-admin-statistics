@@ -40,6 +40,13 @@ var (
 		"BTC":  {0.0001, 1.0},
 		"USDT": {1.0, 10000.0},
 	}
+
+	// Decimal places for stored amounts. Crypto assets use 8; USDT is dollar-pegged so uses 2.
+	amountPrecision = map[string]int32{
+		"ETH":  8,
+		"BTC":  8,
+		"USDT": 2,
+	}
 )
 
 // roundJob tells a build worker which slice of rounds to generate.
@@ -163,7 +170,7 @@ func randomAmount(rng *rand.Rand, currency string) decimal.Decimal {
 // amount into MongoDB's Decimal128 format and computes the USD equivalent using
 // the static rate for the given currency.
 func makeTransaction(userID bson.ObjectID, roundID, txType, currency string, amount decimal.Decimal, createdAt time.Time) model.Transaction {
-	amountD128, _ := bson.ParseDecimal128(amount.StringFixed(8))
+	amountD128, _ := bson.ParseDecimal128(amount.StringFixed(amountPrecision[currency]))
 	usdD128, _ := bson.ParseDecimal128(amount.Mul(rates[currency]).StringFixed(2))
 	return model.Transaction{
 		ID:        bson.NewObjectID(),

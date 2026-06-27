@@ -1,3 +1,5 @@
+# Code Process
+
 I created the assignment md first.
 
 Init git
@@ -61,3 +63,5 @@ Creating stages in the utility script so that its easily manageable and understa
 Creating required APIs
 
 Creating gross_gaming_rev api
+
+Creating an ensure index code and minor code refactoring to support that

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -114,4 +115,59 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, input *Creat
 		return nil, err
 	}
 	return t, nil
+}
+
+type GetGGRInput struct {
+	From *time.Time
+	To   *time.Time
+}
+
+type GGREntry struct {
+	Currency   string `json:"currency"`
+	Wagers     string `json:"wagers"`
+	Payouts    string `json:"payouts"`
+	GGR        string `json:"ggr"`
+	WagersUSD  string `json:"wagersUSD"`
+	PayoutsUSD string `json:"payoutsUSD"`
+	GGRUSD     string `json:"ggrUSD"`
+}
+
+type GGRResult struct {
+	Data []GGREntry `json:"data"`
+}
+
+func (s *TransactionService) GetGGR(ctx context.Context, input *GetGGRInput) (*GGRResult, error) {
+	if input == nil {
+		return nil, errors.New("input must not be nil")
+	}
+
+	totals, err := s.repo.GetGGR(ctx, repository.GGRFilter{
+		From: input.From,
+		To:   input.To,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([]GGREntry, 0, len(totals))
+	for _, t := range totals {
+		// Convert string amounts to decimal.Decimal for arithmetic, then back to string with fixed precision.
+		// Errors are ignored because the repository guarantees valid decimal strings.
+		wagers, _ := decimal.NewFromString(t.Wagers)
+		payouts, _ := decimal.NewFromString(t.Payouts)
+		wagersUSD, _ := decimal.NewFromString(t.WagersUSD)
+		payoutsUSD, _ := decimal.NewFromString(t.PayoutsUSD)
+
+		entries = append(entries, GGREntry{
+			Currency:   t.Currency,
+			Wagers:     wagers.StringFixed(8),
+			Payouts:    payouts.StringFixed(8),
+			GGR:        wagers.Sub(payouts).StringFixed(8),
+			WagersUSD:  wagersUSD.StringFixed(2),
+			PayoutsUSD: payoutsUSD.StringFixed(2),
+			GGRUSD:     wagersUSD.Sub(payoutsUSD).StringFixed(2),
+		})
+	}
+
+	return &GGRResult{Data: entries}, nil
 }

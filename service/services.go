@@ -10,14 +10,14 @@ type Services struct {
 }
 
 type ServicesOptions struct {
-	TransactionRepo repository.TransactionRepository
-	Log             logger.Logger
+	Repos *repository.Repos
+	Log   logger.Logger
 }
 
 func NewServices(opts *ServicesOptions) *Services {
 	return &Services{
 		Transaction: NewTransactionService(&TransactionServiceOptions{
-			Repo: opts.TransactionRepo,
+			Repo: opts.Repos.Transaction,
 			Log:  opts.Log,
 		}),
 	}
