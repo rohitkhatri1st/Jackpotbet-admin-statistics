@@ -27,12 +27,60 @@ func NewTransactionRepository(db *driver.Database) *TransactionRepository {
 // Safe to call on every startup — MongoDB skips creation if the index already exists.
 func (r *TransactionRepository) EnsureIndexes(ctx context.Context) error {
 	_, err := r.collection.Indexes().CreateMany(ctx, []driver.IndexModel{
-		// Covers date-range filtering in GetTransactions and GetGGR $match stage.
+		// Covers date-range $match in ComputeDailyStats and GetTransactions.
 		{Keys: bson.D{{Key: "createdAt", Value: 1}}},
-
 		{Keys: bson.D{{Key: "userId", Value: 1}}},
+		// Compound index for wager percentile aggregation (filter by type + group by userId).
+		{Keys: bson.D{{Key: "type", Value: 1}, {Key: "createdAt", Value: 1}}},
 	})
 	return err
+}
+
+func (r *TransactionRepository) GetAllUserWagerTotals(ctx context.Context, filter repository.WagerRankFilter) ([]repository.UserWagerTotal, error) {
+	matchStage := bson.D{{Key: "type", Value: "Wager"}}
+	dateFilter := bson.D{}
+	if filter.From != nil {
+		dateFilter = append(dateFilter, bson.E{Key: "$gte", Value: *filter.From})
+	}
+	if filter.To != nil {
+		dateFilter = append(dateFilter, bson.E{Key: "$lte", Value: *filter.To})
+	}
+	if len(dateFilter) > 0 {
+		matchStage = append(matchStage, bson.E{Key: "createdAt", Value: dateFilter})
+	}
+
+	pipeline := driver.Pipeline{
+		{{Key: "$match", Value: matchStage}},
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: "$userId"},
+			{Key: "totalUSD", Value: bson.D{{Key: "$sum", Value: "$usdAmount"}}},
+		}}},
+		{{Key: "$sort", Value: bson.D{{Key: "totalUSD", Value: -1}}}},
+	}
+
+	cursor, err := r.collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	type aggResult struct {
+		UserID   bson.ObjectID   `bson:"_id"`
+		TotalUSD bson.Decimal128 `bson:"totalUSD"`
+	}
+	var raw []aggResult
+	if err := cursor.All(ctx, &raw); err != nil {
+		return nil, err
+	}
+
+	result := make([]repository.UserWagerTotal, len(raw))
+	for i, row := range raw {
+		result[i] = repository.UserWagerTotal{
+			UserID:   row.UserID,
+			TotalUSD: row.TotalUSD.String(),
+		}
+	}
+	return result, nil
 }
 
 func (r *TransactionRepository) CreateTransaction(ctx context.Context, t model.Transaction) error {

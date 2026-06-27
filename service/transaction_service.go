@@ -117,32 +117,28 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, input *Creat
 	return t, nil
 }
 
-type GetDailyWagerVolumeInput struct {
-	From *time.Time
-	To   *time.Time
+// ---------- Wager Percentile ----------------------------------------------------
+
+type GetWagerPercentileInput struct {
+	UserID bson.ObjectID
+	From   *time.Time
+	To     *time.Time
 }
 
-type CurrencyVolume struct {
-	Volume    string `json:"volume"`
-	VolumeUSD string `json:"volumeUSD"`
+type WagerPercentileResult struct {
+	UserID     string `json:"userId"`
+	TotalUSD   string `json:"totalUSD"`
+	Rank       int    `json:"rank"`
+	TotalUsers int    `json:"totalUsers"`
+	Percentile string `json:"percentile"` // top N%, e.g. "2.00"
 }
 
-type DailyVolumeEntry struct {
-	Date           string                    `json:"date"`
-	TotalVolumeUSD string                    `json:"totalVolumeUSD"`
-	Currencies     map[string]CurrencyVolume `json:"currencies"`
-}
-
-type DailyWagerVolumeResult struct {
-	Data []DailyVolumeEntry `json:"data"`
-}
-
-func (s *TransactionService) GetDailyWagerVolume(ctx context.Context, input *GetDailyWagerVolumeInput) (*DailyWagerVolumeResult, error) {
+func (s *TransactionService) GetWagerPercentile(ctx context.Context, input *GetWagerPercentileInput) (*WagerPercentileResult, error) {
 	if input == nil {
 		return nil, errors.New("input must not be nil")
 	}
 
-	rows, err := s.repo.GetDailyWagerVolume(ctx, repository.DailyWagerVolumeFilter{
+	allTotals, err := s.repo.GetAllUserWagerTotals(ctx, repository.WagerRankFilter{
 		From: input.From,
 		To:   input.To,
 	})
@@ -150,94 +146,33 @@ func (s *TransactionService) GetDailyWagerVolume(ctx context.Context, input *Get
 		return nil, err
 	}
 
-	return groupDailyWagersByDate(rows), nil
-}
+	totalUsers := len(allTotals)
+	userRank := 0
+	userTotalUSD := decimal.Zero
 
-// groupDailyWagersByDate converts flat (date, currency) repo rows into one
-// DailyVolumeEntry per date, preserving the sort order returned by the repository.
-func groupDailyWagersByDate(rows []repository.DailyWagerVolumeEntry) *DailyWagerVolumeResult {
-	dateOrder := make([]string, 0)
-	totalUSDByDate := make(map[string]decimal.Decimal)
-	// map of [date -> [map of currency -> volume]]
-	currenciesByDate := make(map[string]map[string]CurrencyVolume)
-
-	for _, row := range rows {
-		if _, exists := currenciesByDate[row.Date]; !exists {
-			currenciesByDate[row.Date] = make(map[string]CurrencyVolume)
-			dateOrder = append(dateOrder, row.Date)
+	for i, t := range allTotals {
+		if t.UserID == input.UserID {
+			userRank = i + 1
+			userTotalUSD, _ = decimal.NewFromString(t.TotalUSD)
+			break
 		}
-		volume, _ := decimal.NewFromString(row.Volume)
-		volumeUSD, _ := decimal.NewFromString(row.VolumeUSD)
-		currenciesByDate[row.Date][row.Currency] = CurrencyVolume{
-			Volume:    volume.StringFixed(8),
-			VolumeUSD: volumeUSD.StringFixed(2),
-		}
-		totalUSDByDate[row.Date] = totalUSDByDate[row.Date].Add(volumeUSD)
 	}
 
-	result := make([]DailyVolumeEntry, 0, len(dateOrder))
-	for _, date := range dateOrder {
-		result = append(result, DailyVolumeEntry{
-			Date:           date,
-			TotalVolumeUSD: totalUSDByDate[date].StringFixed(2),
-			Currencies:     currenciesByDate[date],
-		})
+	// User had no wagers in this period — place them last.
+	if userRank == 0 {
+		totalUsers++
+		userRank = totalUsers
 	}
 
-	return &DailyWagerVolumeResult{Data: result}
-}
+	percentile := decimal.NewFromInt(int64(userRank)).
+		Div(decimal.NewFromInt(int64(totalUsers))).
+		Mul(decimal.NewFromInt(100))
 
-type GetGGRInput struct {
-	From *time.Time
-	To   *time.Time
-}
-
-type GGREntry struct {
-	Currency   string `json:"currency"`
-	Wagers     string `json:"wagers"`
-	Payouts    string `json:"payouts"`
-	GGR        string `json:"ggr"`
-	WagersUSD  string `json:"wagersUSD"`
-	PayoutsUSD string `json:"payoutsUSD"`
-	GGRUSD     string `json:"ggrUSD"`
-}
-
-type GGRResult struct {
-	Data []GGREntry `json:"data"`
-}
-
-func (s *TransactionService) GetGGR(ctx context.Context, input *GetGGRInput) (*GGRResult, error) {
-	if input == nil {
-		return nil, errors.New("input must not be nil")
-	}
-
-	totals, err := s.repo.GetGGR(ctx, repository.GGRFilter{
-		From: input.From,
-		To:   input.To,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	entries := make([]GGREntry, 0, len(totals))
-	for _, t := range totals {
-		// Convert string amounts to decimal.Decimal for arithmetic, then back to string with fixed precision.
-		// Errors are ignored because the repository guarantees valid decimal strings.
-		wagers, _ := decimal.NewFromString(t.Wagers)
-		payouts, _ := decimal.NewFromString(t.Payouts)
-		wagersUSD, _ := decimal.NewFromString(t.WagersUSD)
-		payoutsUSD, _ := decimal.NewFromString(t.PayoutsUSD)
-
-		entries = append(entries, GGREntry{
-			Currency:   t.Currency,
-			Wagers:     wagers.StringFixed(8),
-			Payouts:    payouts.StringFixed(8),
-			GGR:        wagers.Sub(payouts).StringFixed(8),
-			WagersUSD:  wagersUSD.StringFixed(2),
-			PayoutsUSD: payoutsUSD.StringFixed(2),
-			GGRUSD:     wagersUSD.Sub(payoutsUSD).StringFixed(2),
-		})
-	}
-
-	return &GGRResult{Data: entries}, nil
+	return &WagerPercentileResult{
+		UserID:     input.UserID.Hex(),
+		TotalUSD:   userTotalUSD.StringFixed(2),
+		Rank:       userRank,
+		TotalUsers: totalUsers,
+		Percentile: percentile.StringFixed(2),
+	}, nil
 }

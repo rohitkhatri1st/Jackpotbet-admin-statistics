@@ -15,38 +15,23 @@ type TransactionFilter struct {
 	Limit  int64
 }
 
-// CurrencyTotals holds wager/payout sums for a single currency as decimal strings,
-// ready for arithmetic in the service layer without any bson dependency.
-type CurrencyTotals struct {
-	Currency   string
-	Wagers     string
-	Payouts    string
-	WagersUSD  string
-	PayoutsUSD string
-}
-
-type GGRFilter struct {
+type WagerRankFilter struct {
 	From *time.Time
 	To   *time.Time
 }
 
-type DailyWagerVolumeFilter struct {
-	From *time.Time
-	To   *time.Time
-}
-
-// DailyWagerVolumeEntry holds the wager volume for one (date, currency) bucket.
-type DailyWagerVolumeEntry struct {
-	Date      string // "2006-01-02"
-	Currency  string
-	Volume    string // decimal string
-	VolumeUSD string // decimal string
+// UserWagerTotal holds a single user's total USD wagered for a period, sorted descending.
+type UserWagerTotal struct {
+	UserID   bson.ObjectID
+	TotalUSD string // decimal string
 }
 
 type TransactionRepository interface {
 	GetTransactions(ctx context.Context, filter TransactionFilter) ([]model.Transaction, error)
 	CreateTransaction(ctx context.Context, t model.Transaction) error
 	BulkInsertTransactions(ctx context.Context, transactions []model.Transaction) error
-	GetGGR(ctx context.Context, filter GGRFilter) ([]CurrencyTotals, error)
-	GetDailyWagerVolume(ctx context.Context, filter DailyWagerVolumeFilter) ([]DailyWagerVolumeEntry, error)
+	// ComputeDailyStats aggregates raw transactions into per-(date, currency) totals
+	// for the given time window. Used by the cron and the manual recompute endpoint.
+	ComputeDailyStats(ctx context.Context, from, to time.Time) ([]model.DailyStats, error)
+	GetAllUserWagerTotals(ctx context.Context, filter WagerRankFilter) ([]UserWagerTotal, error)
 }

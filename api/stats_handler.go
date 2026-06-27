@@ -22,7 +22,7 @@ func (a *API) getDailyWagerVolume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := a.services.Transaction.GetDailyWagerVolume(r.Context(), &service.GetDailyWagerVolumeInput{
+	result, err := a.services.Stats.GetDailyWagerVolume(r.Context(), &service.GetDailyWagerVolumeInput{
 		From: query.From,
 		To:   query.To,
 	})
@@ -50,7 +50,7 @@ func (a *API) getGrossGamingRevenue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := a.services.Transaction.GetGGR(r.Context(), &service.GetGGRInput{
+	result, err := a.services.Stats.GetGGR(r.Context(), &service.GetGGRInput{
 		From: query.From,
 		To:   query.To,
 	})

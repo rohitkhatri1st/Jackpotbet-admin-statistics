@@ -3,6 +3,7 @@ package db
 import (
 	"admin-stats/config"
 	"context"
+	"fmt"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -24,7 +25,24 @@ func (r *RedisDB) Connect(ctx context.Context) error {
 		Password: r.cfg.Password,
 		DB:       r.cfg.DB,
 	})
-	return r.Client.Ping(ctx).Err()
+	if err := r.Client.Ping(ctx).Err(); err != nil {
+		return err
+	}
+	return r.applyServerConfig(ctx)
+}
+
+// applyServerConfig sets server-level Redis policies so the client controls
+// eviction behaviour rather than relying on the server's default configuration.
+func (r *RedisDB) applyServerConfig(ctx context.Context) error {
+	if err := r.Client.ConfigSet(ctx, "maxmemory-policy", "allkeys-lru").Err(); err != nil {
+		return fmt.Errorf("set maxmemory-policy: %w", err)
+	}
+	if r.cfg.MaxMemory != "" {
+		if err := r.Client.ConfigSet(ctx, "maxmemory", r.cfg.MaxMemory).Err(); err != nil {
+			return fmt.Errorf("set maxmemory: %w", err)
+		}
+	}
+	return nil
 }
 
 func (r *RedisDB) Disconnect(ctx context.Context) error {

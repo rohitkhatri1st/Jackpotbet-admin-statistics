@@ -32,4 +32,9 @@ db_name = "jackpotbet"
 [redis]
 addr = "localhost:6379"
 password = ""
-db = 0  # 0 = default db; use a different number for test environments
+db = 0                   # 0 = default db; use a different number for test environments
+max_memory = "256mb"     # Redis server memory cap; empty = no limit
+stats_cache_ttl_hours = 24  # how long historical stat results are cached in Redis
+
+[cron]
+stats_recompute_days = 7  # rolling correction window: cron recomputes the last N days every night

@@ -9,6 +9,7 @@ type Config struct {
 	LoggerConfig LoggerConfig `mapstructure:"logger"`
 	MongoConfig  MongoConfig  `mapstructure:"mongo"`
 	RedisConfig  RedisConfig  `mapstructure:"redis"`
+	CronConfig   CronConfig   `mapstructure:"cron"`
 }
 
 type AuthConfig struct {
@@ -35,9 +36,15 @@ type MongoConfig struct {
 }
 
 type RedisConfig struct {
-	Addr     string `mapstructure:"addr"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
+	Addr               string `mapstructure:"addr"`
+	Password           string `mapstructure:"password"`
+	DB                 int    `mapstructure:"db"`
+	MaxMemory          string `mapstructure:"max_memory"`           // e.g. "256mb", empty = no server limit
+	StatsCacheTTLHours int    `mapstructure:"stats_cache_ttl_hours"` // TTL for cached stat results; 0 = default 24h
+}
+
+type CronConfig struct {
+	StatsRecomputeDays int `mapstructure:"stats_recompute_days"` // rolling correction window; 0 = default 7
 }
 
 type LoggerConfig struct {

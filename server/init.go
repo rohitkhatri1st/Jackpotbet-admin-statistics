@@ -9,6 +9,7 @@ import (
 	"context"
 	"io"
 	"log"
+	"time"
 )
 
 // ---- Loggers ----------------------------------------------------------------
@@ -59,6 +60,7 @@ func (s *Server) initRedis() {
 func (s *Server) initRepos() {
 	s.Repos = &repository.Repos{
 		Transaction: s.initTransactionRepo(),
+		DailyStats:  s.initDailyStatsRepo(),
 	}
 }
 
@@ -71,11 +73,32 @@ func (s *Server) initTransactionRepo() *mongorepo.TransactionRepository {
 	return repo
 }
 
+func (s *Server) initDailyStatsRepo() *mongorepo.DailyStatsRepository {
+	repo := mongorepo.NewDailyStatsRepository(s.MongoDB.DB)
+	if err := repo.EnsureIndexes(context.Background()); err != nil {
+		s.ForceLog.Error(err)
+		log.Fatalf("failed to ensure daily_stats indexes: %v", err)
+	}
+	return repo
+}
+
 // ---- Services ---------------------------------------------------------------
 
 func (s *Server) InitServices() {
+	ttlHours := s.Config.RedisConfig.StatsCacheTTLHours
+	cacheTTL := time.Duration(ttlHours) * time.Hour // 0h → NewStatsService defaults to 24h
+
 	s.Services = service.NewServices(&service.ServicesOptions{
-		Repos: s.Repos,
-		Log:   s.Log,
+		Repos:    s.Repos,
+		Log:      s.Log,
+		Redis:    s.Redis.Client,
+		CacheTTL: cacheTTL,
 	})
+}
+
+// ---- Cron -------------------------------------------------------------------
+
+func (s *Server) StartCron(ctx context.Context) {
+	cron := NewCron(s.Services.Stats, s.Config.CronConfig.StatsRecomputeDays, s.Log)
+	cron.Start(ctx)
 }

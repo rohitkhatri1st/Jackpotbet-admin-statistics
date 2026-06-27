@@ -2,6 +2,7 @@ package main
 
 import (
 	"admin-stats/server"
+	"context"
 	"net"
 	"os"
 	"os/signal"
@@ -9,8 +10,12 @@ import (
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	s := server.NewServer()
 	s.StartServer()
+	s.StartCron(ctx)
 
 	err := sendSystemdNotification()
 	if err != nil {
