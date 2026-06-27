@@ -110,7 +110,7 @@ func TestGetUserWagerRank(t *testing.T) {
 		userA, userB := bson.NewObjectID(), bson.NewObjectID()
 		twoYearsAgo := now.AddDate(-2, 0, 0)
 		insertWager(t, userA, "1000.00", twoYearsAgo) // outside filter
-		insertWager(t, userB, "500.00", now)           // inside filter
+		insertWager(t, userB, "500.00", now)          // inside filter
 
 		from := now.AddDate(-1, 0, 0)
 		filter := repository.WagerRankFilter{From: &from}

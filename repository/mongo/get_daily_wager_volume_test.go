@@ -152,7 +152,7 @@ func TestGetDailyWagerVolume(t *testing.T) {
 	t.Run("date range: from filter — older wagers excluded", func(t *testing.T) {
 		clearCollection(t)
 		insertTx(t, "Wager", user, "USDT", "9999.00", "9999.00", day1) // before from
-		insertTx(t, "Wager", user, "USDT", "200.00", "200.00", day3)    // after from
+		insertTx(t, "Wager", user, "USDT", "200.00", "200.00", day3)   // after from
 
 		got, err := testRepo.GetDailyWagerVolume(ctx, repository.DailyWagerVolumeFilter{From: &day2})
 
@@ -171,7 +171,7 @@ func TestGetDailyWagerVolume(t *testing.T) {
 	t.Run("date range: from+to filter — only in-window wagers counted", func(t *testing.T) {
 		clearCollection(t)
 		insertTx(t, "Wager", user, "USDT", "9999.00", "9999.00", day1) // before from
-		insertTx(t, "Wager", user, "USDT", "200.00", "200.00", day2)    // in window
+		insertTx(t, "Wager", user, "USDT", "200.00", "200.00", day2)   // in window
 		insertTx(t, "Wager", user, "USDT", "9999.00", "9999.00", day3) // after to
 
 		got, err := testRepo.GetDailyWagerVolume(ctx, repository.DailyWagerVolumeFilter{From: &day2, To: &day2})

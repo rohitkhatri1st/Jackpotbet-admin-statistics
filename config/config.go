@@ -17,9 +17,9 @@ type AuthConfig struct {
 
 type ServerConfig struct {
 	Port                 int  `mapstructure:"port"`
-	ReadTimeout          int  `mapstructure:"read_timeout"`           // seconds
-	WriteTimeout         int  `mapstructure:"write_timeout"`          // seconds
-	IdleTimeout          int  `mapstructure:"idle_timeout"`           // seconds
+	ReadTimeout          int  `mapstructure:"read_timeout"`  // seconds
+	WriteTimeout         int  `mapstructure:"write_timeout"` // seconds
+	IdleTimeout          int  `mapstructure:"idle_timeout"`  // seconds
 	EnableRequestLogging bool `mapstructure:"enable_request_logging"`
 }
 
@@ -38,7 +38,7 @@ type RedisConfig struct {
 	Addr          string `mapstructure:"addr"`
 	Password      string `mapstructure:"password"`
 	DB            int    `mapstructure:"db"`
-	MaxMemory     string `mapstructure:"max_memory"`    // e.g. "256mb"; empty = leave to operator
+	MaxMemory     string `mapstructure:"max_memory"` // e.g. "256mb"; empty = leave to operator
 	CacheTTLHours int    `mapstructure:"cache_ttl_hours"`
 }
 

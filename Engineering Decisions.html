@@ -728,5 +728,52 @@
   <p>The same isolation applies to the logger: all packages receive a <code>logger.Logger</code> interface. The zerolog implementation is wired in <code>server/init.go</code> and is invisible to anything that uses it.</p>
 </div>
 
+<!-- ── 11 TESTING STRATEGY ── -->
+<div class="section">
+  <div class="section-eyebrow">11 · Testing Strategy</div>
+  <h2>Integration Tests and Mock Design</h2>
+  <p>Two distinct test layers cover different concerns. The repository layer requires a live MongoDB instance to be meaningful — unit testing a MongoDB aggregation pipeline against a mock is testing nothing. The service layer has no I/O and can be tested entirely with in-process mocks.</p>
+
+  <div class="decision">
+    <div class="decision-label">Repository Tests</div>
+    <div class="decision-title">Integration tests gated behind a build tag, not run by default</div>
+    <div class="decision-body">
+      <p>Repository tests live under <code>repository/mongo/</code> and carry a <code>//go:build integration</code> tag. Running <code>go test ./...</code> skips them; <code>go test -tags integration ./repository/...</code> runs them against a real MongoDB instance. A <code>TestMain</code> handles setup and teardown — it connects to the test database, runs all tests, drops the database, and disconnects. If MongoDB is unavailable, <code>log.Fatalf</code> halts immediately with the connection URI printed — because the developer has explicitly opted in with the build tag, a silent skip would make debugging impossible.</p>
+      <div class="tradeoff">
+        <div class="tradeoff-label trade">Trade-off</div>
+        <div class="tradeoff-text">CI must have a MongoDB instance available when the integration tag is used. The tag makes this an explicit opt-in rather than a broken default — a clean machine running <code>go test ./...</code> gets all service and unit tests without needing any infrastructure.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="decision">
+    <div class="decision-label">Service Tests</div>
+    <div class="decision-title">Hand-written function-field mocks over mockery</div>
+    <div class="decision-body">
+      <p>The service layer is tested with a hand-written <code>mockRepo</code> struct that implements <code>TransactionRepository</code> via function fields. Each test sets only the fields it needs; unset fields panic on call. The alternative — mockery, a widely-used code-generation tool — was considered and rejected for this interface.</p>
+
+      <div class="tradeoff">
+        <div class="tradeoff-label chose">Chose</div>
+        <div class="tradeoff-text">No tooling dependency: <code>go test ./...</code> works without a code-generation step, a CLI install, or a <code>.mockery.yaml</code> to maintain. When the interface changes, one struct and its method stubs are updated — the same effort as re-running mockery, without the extra layer.</div>
+      </div>
+      <div class="tradeoff">
+        <div class="tradeoff-label chose">Chose</div>
+        <div class="tradeoff-text">Closure captures feel natural. Capturing a local variable directly in a function literal (<code>capturedLimit = f.Limit</code>) is more readable than asserting on a mock framework's call log after the fact. The assertion lives right next to the setup.</div>
+      </div>
+      <div class="tradeoff">
+        <div class="tradeoff-label chose">Chose</div>
+        <div class="tradeoff-text">Panics on unexpected calls. A nil function field panics immediately rather than silently returning zero values. A missing mock setup is impossible to overlook — it blows up at the exact line that called the unconfigured method.</div>
+      </div>
+      <div class="tradeoff">
+        <div class="tradeoff-label trade">Trade-off</div>
+        <div class="tradeoff-text">Manual maintenance when the interface changes — a new method requires updating the struct and adding a stub. mockery auto-generates this. The break-even point is roughly 10+ methods or an interface that changes frequently. At 6 stable methods, the boilerplate cost does not justify the tooling dependency.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Redis is nil in service tests</h3>
+  <p>The <code>newService</code> helper passes <code>Redis: nil</code>. Every caching call in the service checks for a nil client and silently skips caching when it is absent. This means service tests exercise only business logic — the cache hit/miss paths are an infrastructure concern, not a service logic concern, and do not need mocking.</p>
+</div>
+
 </body>
 </html>
