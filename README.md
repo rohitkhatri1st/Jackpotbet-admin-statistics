@@ -5,7 +5,7 @@ admin-facing statistics such as Gross Gaming Revenue, daily wager volume, and
 per-user wager percentile rankings.
 
 > **Engineering Decisions** —
-> [View the full write-up](https://rohitkhatri1st.github.io/Jackpotbet-admin-statistics/Engineering%20Decisions.html)
+> [View the full write-up](https://rohitkhatri1st.github.io/Jackpotbet-admin-statistics/Engineering%20Decisions.html) · [Raw notes](Raw%20Engineering%20Decisions.md) *(the working file written while architecting the project)*
 >
 > **API Docs (Postman)** —
 > [View the collection](https://documenter.getpostman.com/view/37222846/2sBXwyG7Uj)
